@@ -47,3 +47,10 @@ It offers a powerful feature set while keeping unnecessary complexity to a minim
 
 	AtomicAssets features a native implementation of two sided trade offers (similar to Steam or WAX Express Trade). This allows creating and accepting offers **with a single action**.
 	The implementation of the offers also allows for **peer to peer marketplaces** that don't require transferring ownership to a market contract.
+
+## Build contract
+
+```bash
+$ mkdir build
+$ cdt-cpp -abigen -contract=atomicassets -I./include src/atomicassets.cpp -o build/atomicassets.wasm
+```
