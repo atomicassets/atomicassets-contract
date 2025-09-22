@@ -146,4 +146,37 @@ describe('test addcolauth contract', () => {
             user1.name.toString()
         ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("missing required authority");
     });
+
+    test("throw when exceeding 24 authorized accounts limit", async () => {
+        // Create additional accounts for testing
+        const testAccounts = [];
+        for (let i = 1; i <= 25; i++) {
+            const a = i % 5 + 1;
+            const b = Math.floor(i/5) + 1;
+            const account = blockchain.createAccount(`testuser${a}${b}`);
+            testAccounts.push(account);
+        }
+
+        // Create collection with first 23 authorized accounts (plus user1 as author makes 24 total)
+        const initialAuthorizedAccounts = [];
+        for (let i = 0; i < 24; i++) {
+            initialAuthorizedAccounts.push(testAccounts[i].name.toString());
+        }
+
+        await atomicassets.actions.createcol([
+            user1.name.toString(),
+            "testcollect1",
+            true,
+            initialAuthorizedAccounts,
+            [],
+            0.05,
+            []
+        ]).send(`${user1.name.toString()}@active`);
+
+        // Try to add the 24th account (which would make 25 total with author)
+        await expect(atomicassets.actions.addcolauth([
+            "testcollect1",
+            testAccounts[24].name.toString()
+        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("Can only have up to 24 authorized accounts");
+    });
 });

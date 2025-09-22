@@ -169,23 +169,8 @@ describe('test mintasset contract', () => {
         }]);
     });
 
-    test("mint asset with one backed token", async () => {
-        // expect.assertions(2);
-
-        // Add supported token first
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "8,WAX"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        // User1 deposits tokens to contract
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "8,WAX"
-        ]).send(`${user1.name.toString()}@active`);
-        await eosioToken.actions.transfer([user1.name.toString(), atomicassets.name.toString(), "150.00000000 WAX", 'deposit']).send(`${user1.name.toString()}@active`);
-
-        await atomicassets.actions.mintasset([
+    test("Throw if mint asset with one backed token (deprecated)", async () => {
+        await expect(atomicassets.actions.mintasset([
             user1.name.toString(),
             "testcollect1",
             "testschema",
@@ -194,54 +179,11 @@ describe('test mintasset contract', () => {
             [],
             [],
             ["100.00000000 WAX"]
-        ]).send(`${user1.name.toString()}@active`);
-
-        const user3_assets = atomicassets.tables.assets(nameToBigInt(user3.name)).getTableRows();
-        expect(user3_assets).toEqual([{
-            asset_id: "1099511627776",
-            collection_name: "testcollect1",
-            schema_name: "testschema",
-            template_id: -1,
-            ram_payer: user1.name.toString(),
-            backed_tokens: ["100.00000000 WAX"],
-            immutable_serialized_data: '',
-            mutable_serialized_data: ''
-        }]);
-
-        const balances = atomicassets.tables.balances(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(balances).toEqual([{
-            owner: user1.name.toString(),
-            quantities: ["50.00000000 WAX"]
-        }]);
+        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow('Native backing has been deprecated on the AtomicAssets Contract');
     });
 
-    test("mint asset with two backed tokens", async () => {
-        // expect.assertions(2);
-
-        // Add supported tokens first
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "8,WAX"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "4,EOS"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        // User1 deposits tokens to contract
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "8,WAX"
-        ]).send(`${user1.name.toString()}@active`);
-        await eosioToken.actions.transfer([user1.name.toString(), atomicassets.name.toString(), "150.00000000 WAX", 'deposit']).send(`${user1.name.toString()}@active`);
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "4,EOS"
-        ]).send(`${user1.name.toString()}@active`);
-        await eosioToken.actions.transfer([user1.name.toString(), atomicassets.name.toString(), "10.0000 EOS", 'deposit']).send(`${user1.name.toString()}@active`);
-
-        await atomicassets.actions.mintasset([
+    test("throw if mint asset with two backed tokens", async () => {
+        await expect(atomicassets.actions.mintasset([
             user1.name.toString(),
             "testcollect1",
             "testschema",
@@ -250,96 +192,7 @@ describe('test mintasset contract', () => {
             [],
             [],
             ["100.00000000 WAX", "10.0000 EOS"]
-        ]).send(`${user1.name.toString()}@active`);
-
-        const user3_assets = atomicassets.tables.assets(nameToBigInt(user3.name)).getTableRows();
-        expect(user3_assets).toEqual([{
-            asset_id: "1099511627776",
-            collection_name: "testcollect1",
-            schema_name: "testschema",
-            template_id: -1,
-            ram_payer: user1.name.toString(),
-            backed_tokens: ["100.00000000 WAX", "10.0000 EOS"],
-            immutable_serialized_data: '',
-            mutable_serialized_data: ''
-        }]);
-
-        const balances = atomicassets.tables.balances(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(balances).toEqual([{
-            owner: user1.name.toString(),
-            quantities: ["50.00000000 WAX"]
-        }]);
-    });
-
-    test("throw when minter tries to back tokens but does not have any balance", async () => {
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "8,WAX"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        await expect(atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            -1,
-            user3.name.toString(),
-            [],
-            [],
-            ["100.00000000 WAX"]
-        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("The specified account does not have a balance table row");
-    });
-
-    test("throw when minter tries to back tokens but does not have enough balance", async () => {
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "8,WAX"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "8,WAX"
-        ]).send(`${user1.name.toString()}@active`);
-        await eosioToken.actions.transfer([user1.name.toString(), atomicassets.name.toString(), "50.00000000 WAX", 'deposit']).send(`${user1.name.toString()}@active`);
-
-        await expect(atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            -1,
-            user3.name.toString(),
-            [],
-            [],
-            ["100.00000000 WAX"]
-        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("The specified account's balance is lower than the specified quantity");
-    });
-
-    test("throw when minter tries to back tokens but only has balance for a different token", async () => {
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "4,EOS"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "8,WAX"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "4,EOS"
-        ]).send(`${user1.name.toString()}@active`);
-        await eosioToken.actions.transfer([user1.name.toString(), atomicassets.name.toString(), "10.0000 EOS", 'deposit']).send(`${user1.name.toString()}@active`);
-
-        await expect(atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            -1,
-            user3.name.toString(),
-            [],
-            [],
-            ["100.00000000 WAX"]
-        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("The specified account does not have a balance for the symbol specified in the quantity");
+        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow('Native backing has been deprecated on the AtomicAssets Contract');
     });
 
     test("mint asset referencing a template", async () => {
@@ -425,64 +278,6 @@ describe('test mintasset contract', () => {
             [],
             []
         ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("The template's maxsupply has already been reached");
-    });
-
-    test("throw when minting asset with backed token referencing a template that is not burnable", async () => {
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "8,WAX"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "8,WAX"
-        ]).send(`${user1.name.toString()}@active`);
-        await eosioToken.actions.transfer([user1.name.toString(), atomicassets.name.toString(), "100.00000000 WAX", 'deposit']).send(`${user1.name.toString()}@active`);
-
-        await atomicassets.actions.createtempl([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            true,
-            false,
-            0,
-            []
-        ]).send(`${user1.name.toString()}@active`);
-
-        await expect(atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            1,
-            user3.name.toString(),
-            [],
-            [],
-            ["50.00000000 WAX"]
-        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("The asset is not burnable. Only burnable assets can be backed.");
-    });
-
-    test("throw when minting asset with multiple backed tokens with the same symbol", async () => {
-        await atomicassets.actions.addconftoken([
-            "eosio.token",
-            "8,WAX"
-        ]).send(`${atomicassets.name.toString()}@active`);
-
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "8,WAX"
-        ]).send(`${user1.name.toString()}@active`);
-        await eosioToken.actions.transfer([user1.name.toString(), atomicassets.name.toString(), "100.00000000 WAX", 'deposit']).send(`${user1.name.toString()}@active`);
-
-        await expect(atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            -1,
-            user3.name.toString(),
-            [],
-            [],
-            ["50.00000000 WAX","20.00000000 WAX"]
-        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("Symbols in the tokens_to_back must be unique");
     });
 
     test("throw when template id is a negative number other than -1", async () => {
@@ -641,6 +436,6 @@ describe('test mintasset contract', () => {
             [],
             [],
             []
-        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("The minter is not authorized within the collection");
+        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("Missing authorization for this collection");
     });
 });

@@ -134,8 +134,8 @@ describe('test createtempl contract', () => {
         }]);
     });
 
-    test("create template with max supply / non transferable / non burnable", async () => {
-        await atomicassets.actions.createtempl([
+    test("throw if create template non transferable / non burnable", async () => {
+        await expect(atomicassets.actions.createtempl([
             user1.name.toString(),
             "testcollect1",
             "testschema",
@@ -143,18 +143,7 @@ describe('test createtempl contract', () => {
             false,
             10,
             []
-        ]).send(`${user1.name.toString()}@active`);
-
-        const collection_templates = atomicassets.tables.templates(nameToBigInt("testcollect1")).getTableRows();
-        expect(collection_templates).toEqual([{
-            template_id: 1,
-            schema_name: "testschema",
-            transferable: false,
-            burnable: false,
-            max_supply: 10,
-            issued_supply: 0,
-            immutable_serialized_data: ''
-        }]);
+        ]).send(`${user1.name.toString()}@active`)).rejects.toThrow('A template cannot be both non-transferable and non-burnable');
     });
 
     test("throw when collection does not exist", async () => {
@@ -249,6 +238,6 @@ describe('test createtempl contract', () => {
             true,
             0,
             []
-        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("The creator is not authorized within the collection");
+        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("Missing authorization for this collection");
     });
 });

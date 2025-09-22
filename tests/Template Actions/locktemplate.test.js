@@ -325,6 +325,6 @@ describe('test locktemplate contract', () => {
             user2.name.toString(),
             "testcollect1",
             1
-        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("The editor is not authorized within the collection");
+        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("Missing authorization for this collection");
     });
 });

@@ -220,6 +220,6 @@ describe('test createschema contract', () => {
             [
                 {name: "name", type: "string"}
             ]
-        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("The creator is not authorized within the collection");
+        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("Missing authorization for this collection");
     });
 });

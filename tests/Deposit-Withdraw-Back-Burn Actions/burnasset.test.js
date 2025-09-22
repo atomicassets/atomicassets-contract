@@ -82,242 +82,6 @@ describe("test burnasset contract", () => {
         expect(balances).toEqual([]);
     });
 
-    test("burn asset with single backed token", async () => {
-        expect.assertions(4);
-
-        // Create token contract and set up tokens
-        const tokenContract = blockchain.createAccount({
-            name: Name.from('eosio.token'),
-            wasm: fs.readFileSync('./tests/fixtures/eosio.token/eosio.token.wasm'),
-            abi: fs.readFileSync('./tests/fixtures/eosio.token/eosio.token.abi', 'utf8'),
-        });
-
-        await mintTokens(tokenContract, 'WAX', 8, 1000000000, 100, [user1]);
-
-        // Set up deposit
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "8,WAX"
-        ]).send(`${user1.name.toString()}@active`);
-
-        await tokenContract.actions.transfer([
-            user1.name.toString(),
-            atomicassets.name.toString(),
-            '100.00000000 WAX',
-            'deposit'
-        ]).send(`${user1.name.toString()}@active`);
-
-        // Mint asset and back it
-        await atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            -1,
-            user1.name.toString(),
-            [],
-            [],
-            []
-        ]).send(`${user1.name.toString()}@active`);
-
-        await atomicassets.actions.backasset([
-            user1.name.toString(),
-            user1.name.toString(),
-            "1099511627776",
-            "100.00000000 WAX"
-        ]).send(`${user1.name.toString()}@active`);
-
-        // Burn the asset
-        await atomicassets.actions.burnasset([
-            user1.name.toString(),
-            "1099511627776"
-        ]).send(`${user1.name.toString()}@active`);
-
-        const user1_assets = atomicassets.tables.assets(nameToBigInt(user1.name)).getTableRows();
-        expect(user1_assets).toEqual([]);
-
-        const atomicassets_token_balance = tokenContract.tables.accounts(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(atomicassets_token_balance).toEqual([{
-            balance: "100.00000000 WAX"
-        }]);
-
-        const user1_token_balance = tokenContract.tables.accounts(nameToBigInt(user1.name)).getTableRows();
-        expect(user1_token_balance).toEqual([{
-            balance: "0.00000000 WAX"
-        }]);
-
-        const balances = atomicassets.tables.balances(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(balances).toEqual([{
-            owner: user1.name.toString(),
-            quantities: ["100.00000000 WAX"]
-        }]);
-    });
-
-    test("burn asset with backed token when owner has a balance table", async () => {
-        expect.assertions(4);
-
-        // Create token contract and set up tokens
-        const tokenContract = blockchain.createAccount({
-            name: Name.from('eosio.token'),
-            wasm: fs.readFileSync('./tests/fixtures/eosio.token/eosio.token.wasm'),
-            abi: fs.readFileSync('./tests/fixtures/eosio.token/eosio.token.abi', 'utf8'),
-        });
-
-        await mintTokens(tokenContract, 'WAX', 8, 1000000000, 150, [user1]);
-
-        // Set up deposit with extra tokens
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "8,WAX"
-        ]).send(`${user1.name.toString()}@active`);
-
-        await tokenContract.actions.transfer([
-            user1.name.toString(),
-            atomicassets.name.toString(),
-            '150.00000000 WAX',
-            'deposit'
-        ]).send(`${user1.name.toString()}@active`);
-
-        // Mint asset and back it with part of the balance
-        await atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            -1,
-            user1.name.toString(),
-            [],
-            [],
-            []
-        ]).send(`${user1.name.toString()}@active`);
-
-        await atomicassets.actions.backasset([
-            user1.name.toString(),
-            user1.name.toString(),
-            "1099511627776",
-            "100.00000000 WAX"
-        ]).send(`${user1.name.toString()}@active`);
-
-        // Burn the asset
-        await atomicassets.actions.burnasset([
-            user1.name.toString(),
-            "1099511627776"
-        ]).send(`${user1.name.toString()}@active`);
-
-        const user1_assets = atomicassets.tables.assets(nameToBigInt(user1.name)).getTableRows();
-        expect(user1_assets).toEqual([]);
-
-        const atomicassets_token_balance = tokenContract.tables.accounts(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(atomicassets_token_balance).toEqual([{
-            balance: "150.00000000 WAX"
-        }]);
-
-        const user1_token_balance = tokenContract.tables.accounts(nameToBigInt(user1.name)).getTableRows();
-        expect(user1_token_balance).toEqual([{
-            balance: "0.00000000 WAX"
-        }]);
-
-        const balances = atomicassets.tables.balances(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(balances).toEqual([{
-            owner: user1.name.toString(),
-            quantities: ["150.00000000 WAX"]
-        }]);
-    });
-
-    test("burn asset with multiple backed tokens", async () => {
-        expect.assertions(4);
-
-        // Create token contracts
-        const tokenContract = blockchain.createAccount({
-            name: Name.from('eosio.token'),
-            wasm: fs.readFileSync('./tests/fixtures/eosio.token/eosio.token.wasm'),
-            abi: fs.readFileSync('./tests/fixtures/eosio.token/eosio.token.abi', 'utf8'),
-        });
-
-        const karmaContract = blockchain.createAccount({
-            name: Name.from('karmatoken'),
-            wasm: fs.readFileSync('./tests/fixtures/eosio.token/eosio.token.wasm'),
-            abi: fs.readFileSync('./tests/fixtures/eosio.token/eosio.token.abi', 'utf8'),
-        });
-
-        await mintTokens(tokenContract, 'WAX', 8, 1000000000, 100, [user1]);
-        await mintTokens(karmaContract, 'KARMA', 4, 1000000000, 500, [user1]);
-
-        // Set up deposits for both tokens
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "8,WAX"
-        ]).send(`${user1.name.toString()}@active`);
-
-        await tokenContract.actions.transfer([
-            user1.name.toString(),
-            atomicassets.name.toString(),
-            '100.00000000 WAX',
-            'deposit'
-        ]).send(`${user1.name.toString()}@active`);
-
-        await atomicassets.actions.announcedepo([
-            user1.name.toString(),
-            "4,KARMA"
-        ]).send(`${user1.name.toString()}@active`);
-
-        await karmaContract.actions.transfer([
-            user1.name.toString(),
-            atomicassets.name.toString(),
-            '500.0000 KARMA',
-            'deposit'
-        ]).send(`${user1.name.toString()}@active`);
-
-        // Mint asset and back it with both tokens
-        await atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            -1,
-            user1.name.toString(),
-            [],
-            [],
-            []
-        ]).send(`${user1.name.toString()}@active`);
-
-        await atomicassets.actions.backasset([
-            user1.name.toString(),
-            user1.name.toString(),
-            "1099511627776",
-            "100.00000000 WAX"
-        ]).send(`${user1.name.toString()}@active`);
-
-        await atomicassets.actions.backasset([
-            user1.name.toString(),
-            user1.name.toString(),
-            "1099511627776",
-            "500.0000 KARMA"
-        ]).send(`${user1.name.toString()}@active`);
-
-        // Burn the asset
-        await atomicassets.actions.burnasset([
-            user1.name.toString(),
-            "1099511627776"
-        ]).send(`${user1.name.toString()}@active`);
-
-        const user1_assets = atomicassets.tables.assets(nameToBigInt(user1.name)).getTableRows();
-        expect(user1_assets).toEqual([]);
-
-        const user1_token_balance = tokenContract.tables.accounts(nameToBigInt(user1.name)).getTableRows();
-        expect(user1_token_balance).toEqual([{
-            balance: "0.00000000 WAX"
-        }]);
-
-        const user1_karmatoken_balance = karmaContract.tables.accounts(nameToBigInt(user1.name)).getTableRows();
-        expect(user1_karmatoken_balance).toEqual([{
-            balance: "0.0000 KARMA"
-        }]);
-
-        const balances = atomicassets.tables.balances(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(balances).toEqual([{
-            owner: user1.name.toString(),
-            quantities: ["100.00000000 WAX", "500.0000 KARMA"]
-        }]);
-    });
-
     test("issued supply in template stays the same after burning", async () => {
         expect.assertions(2);
 
@@ -422,5 +186,49 @@ describe("test burnasset contract", () => {
             user1.name.toString(),
             "1099511627776"
         ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("missing required authority");
+    });
+
+    test("burn asset with holder record deletes the holder entry", async () => {
+        expect.assertions(3);
+
+        // Mint asset for user1
+        await atomicassets.actions.mintasset([
+            user1.name.toString(),
+            "testcollect1",
+            "testschema",
+            -1,
+            user1.name.toString(),
+            [],
+            [],
+            []
+        ]).send(`${user1.name.toString()}@active`);
+
+        // Move asset from owner (user1) to holder (user2)
+        await atomicassets.actions.move([
+            user1.name.toString(), // owner
+            user1.name.toString(), // from (owner)
+            user2.name.toString(), // to (new holder)
+            ["1099511627776"],
+            'Move to holder for burning test'
+        ]).send(`${user1.name.toString()}@owner`);
+
+        // Verify holder record exists
+        let holders = atomicassets.tables.holders(nameToBigInt(atomicassets.name)).getTableRows();
+        expect(holders).toHaveLength(1);
+        expect(holders[0]).toMatchObject({
+            asset_id: "1099511627776",
+            owner: user1.name.toString(),
+            holder: user2.name.toString()
+        });
+
+        // Burn the asset (owner can burn even when held by someone else)
+        await atomicassets.actions.burnasset([
+            user1.name.toString(),
+            "1099511627776"
+        ]).send(`${user1.name.toString()}@active`);
+
+        // Verify holder record was deleted along with the asset
+        holders = atomicassets.tables.holders(nameToBigInt(atomicassets.name)).getTableRows();
+        expect(holders).toHaveLength(0);
     });
 });

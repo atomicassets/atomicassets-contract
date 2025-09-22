@@ -258,7 +258,7 @@ describe('test setassetdata contract', () => {
             [
                 {"first": "name", "second": ["string", "ABC"]}
             ]
-        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("The editor is not authorized within the collection");
+        ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("Missing authorization for this collection");
     });
 
 });
