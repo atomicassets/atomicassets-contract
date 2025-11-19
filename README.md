@@ -9,7 +9,6 @@ It offers a powerful feature set while keeping unnecessary complexity to a minim
 - API: https://github.com/pinknetworkx/eosio-contract-api
 - Live API example: https://wax.api.atomicassets.io/atomicassets/docs/
 - Javascript module: https://www.npmjs.com/package/atomicassets
-- Test cases (using Hydra framework): https://github.com/pinknetworkx/atomicassets-contract-tests
 - AtomicMarket (open source marketplace): https://github.com/pinknetworkx/atomicmarket-contract
 - Telegram group: https://t.me/atomicassets
 
@@ -54,3 +53,28 @@ It offers a powerful feature set while keeping unnecessary complexity to a minim
 $ mkdir build
 $ cdt-cpp -abigen -contract=atomicassets -I./include src/atomicassets.cpp -o build/atomicassets.wasm
 ```
+
+## Testing
+
+### Test Framework
+- Uses Vert framework for EOSIO contract testing (migrated from Hydra)
+- Tests written in JavaScript using Jest
+- Test configuration in `jest.config.js` with 10-minute timeout
+
+### Running Tests
+
+```bash
+$ yarn install
+$ yarn test        # Run all tests
+$ yarn test addconf  # Run specific test files matching pattern
+```
+
+### Test Structure
+Tests are organized in directories by functionality:
+- `tests/Admin Actions/` - Administrative operations
+- `tests/Asset Actions/` - Asset creation and management
+- `tests/Collection Actions/` - Collection management
+- `tests/Schema Actions/` - Schema operations
+- `tests/Template Actions/` - Template management
+- `tests/Transfer-Offer Actions/` - Transfer and trading functionality
+- `tests/Deposit-Withdraw-Back-Burn Actions/` - Token backing operations
