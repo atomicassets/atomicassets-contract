@@ -1,3 +1,5 @@
+build/*
+*.wat
 .eosproj
 .DS_STORE
 

@@ -50,8 +50,8 @@ It offers a powerful feature set while keeping unnecessary complexity to a minim
 ## Build contract
 
 ```bash
-$ mkdir build
-$ cdt-cpp -abigen -contract=atomicassets -I./include src/atomicassets.cpp -o build/atomicassets.wasm
+$ make clean
+$ make build
 ```
 
 ## Testing
@@ -60,6 +60,18 @@ $ cdt-cpp -abigen -contract=atomicassets -I./include src/atomicassets.cpp -o bui
 - Uses Vert framework for EOSIO contract testing (migrated from Hydra)
 - Tests written in JavaScript using Jest
 - Test configuration in `jest.config.js` with 10-minute timeout
+
+### Export contract memory
+
+- VeRT requires exported memory in your contract.
+- If you are using CDT to compile your contracts, you need to export memory in your contract manually prior to version 4.1.0.
+
+```bash
+# if you don't have wabt:
+$ apt-get install wabt
+
+$ make export-memory
+```
 
 ### Running Tests
 
