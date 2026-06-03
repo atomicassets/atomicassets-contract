@@ -1935,63 +1935,22 @@ void atomicassets::internal_decrease_balance(
 
 
 /**
-
-        **********************
-        ***Low Level Kungfu***
-        **********************
-
-* When retrieving a table's row, if any indice except a key is accessed, all of the row's data is loaded into cache
-* The serialized_data vector for collections can contain a ton of data, up to 3-4kb in some cases. 
-
-* 'notify_collection_accounts' & 'check_has_collection_auth' functions are used throughout the entire smart contract, sometimes several times due to inline actions
-* So even though these functions only need their respesctive vector<name> fields, the contract is still forced to load the row into cache
-
-* This ends up being a rather significant performance pitfall, as it's an unnecessary CPU tax when interacting with AtomicAssets
-* The solution below utilizes low level host functions to perform a partial memory read to directly access a set amount of bytes for increased CPU performance
-
-* General Bytes Math = 
-    + 128               // Row + uin64_t collection_name Primary Key, will always be 128
-    + 8 + 1 + 8         // For author, allow_notify & market_fee, will always be 17
-    + 1 + 1 + 2         // For authorized_accounts, notify_accounts & serialized_data, the size of the vector itself is dependant on the number of elements, will be 4 (to be safe). <255 = 1, <65565 = 2, etc.
-    + (8 * R={1|48})    // 8 Bytes for each element in the notify_accounts & authorized_accounts, up to 24 for each, total ranging from 8 = 384
-
-* Total Bytes R={157|533}     
-* The upper limit of 533 can be used to "Safely" capture all data, except serialized data, accepting an upper limit of up to 48 notify/authorized accounts
-
-* In practice, this can be further reduced, as the fields in the row are deserialized sequentially & we only care about the specific vector <name> fields
-
-    TABLE collections_s {
-        name             collection_name;
-        name             author;
-        bool             allow_notify;
-        vector <name>    authorized_accounts;
-        vector <name>    notify_accounts;
-
-        *********************************
-        Everything below here can be safely ignored for this process
-        *********************************
-
-        double           market_fee; 
-        vector <uint8_t> serialized_data;
-
-        uint64_t primary_key() const { return collection_name.value; };
-    };
-
-* Authorized Bytes Math = 
-    + 128               // Row + uint64_t collection_name Primary Key
-    + 8 + 1             // For author & allow_notify, will always be 9
-    + 1 + (8 * R={1|24})// authorized_accounts vector + 8 Bytes for each element, up to 24, total ranging from 1 + (8 to 192)
-
-* Total Bytes R={146|330}
-
-* Notify Bytes Math = 
-    + 128               // Row + uint64_t collection_name Primary Key
-    + 8 + 1             // For author & allow_notify, will always be 9
-    + 2                 // authorized_accounts + notify_accounts vectors = 2
-    + (8 * R={25|48})   // Assuming max authorized_accounts, 8 Bytes for each element in authorized_accounts & notify_accounts, up to 24, total ranging from 200 to 384
-
-* Total Bytes R={339|523}
-
+* check_has_collection_auth and notify_collection_accounts run constantly (incl. via inline
+* actions) and each need only one vector<name> field, but a normal table read loads the whole
+* row (including serialized_data, up to 3-4 KB) into cache. This reads just the needed prefix
+* with db_get_i64 to save CPU.
+*
+* db_get_i64 returns only the row payload (no PK prefix). collections_s serializes as:
+*   collection_name(8) author(8) allow_notify(1) authorized_accounts(1+8N) notify_accounts(1+8M)
+*   market_fee(8) serialized_data(varint+blob)   // market_fee onward is truncated/unused here
+*
+* Each vector caps at 24, so the read budgets are:
+*   auth   (type=false): through authorized_accounts, <=210 B  (buffer 330)
+*   notify (type=true):  through notify_accounts,      <=403 B  (buffer 523)
+*
+* The auth path MUST early-return before `ds >> notify_accounts`: against the 330-byte buffer
+* that read overflows on a large row and throws "datastream attempted to read past the end",
+* bricking every check_has_collection_auth caller. See the early return below.
 */
 
 vector<name> atomicassets::partial_read_collection(
@@ -2019,13 +1978,14 @@ vector<name> atomicassets::partial_read_collection(
     ds >> author;
     ds >> allow_notify;
     ds >> authorized_accounts;
-    ds >> notify_accounts;
-    
-    if (!type){
+
+    // Auth path stops here; reading notify_accounts would overflow the 330-byte buffer (see above).
+    if (!type) {
         return authorized_accounts;
-    } else {
-        return notify_accounts;
     }
+
+    ds >> notify_accounts;
+    return notify_accounts;
 }
 
 /**
