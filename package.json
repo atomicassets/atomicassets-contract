@@ -8,10 +8,10 @@
     "prettier": "prettier --single-quote --trailing-comma es5 --write **/*.js"
   },
   "dependencies": {
-    "@vaulta/vert": "^2.1.1",
-    "jest": "^25.1.0"
+    "@vaulta/vert": "^2.1.1"
   },
   "devDependencies": {
+    "jest": "^25.1.0",
     "prettier": "^2.7.1"
   },
   "keywords": [],
