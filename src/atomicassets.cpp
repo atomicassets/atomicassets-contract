@@ -701,6 +701,39 @@ ACTION atomicassets::setrampayer(
 }
 
 
+ACTION atomicassets::setlastpayer(
+    name owner,
+    name collection_name
+) {
+    require_auth(owner);
+
+    assets_t owner_assets = get_assets(owner);
+
+    check(owner_assets.begin() != owner_assets.end(), "owner holds no assets");
+
+    auto asset_itr = --owner_assets.end();
+
+    check(asset_itr->collection_name == collection_name,
+        "newest owned asset is not in the expected collection");
+
+    check(asset_itr->ram_payer != owner,
+        "owner is already the ram_payer of this asset");
+
+    name old_ram_payer = asset_itr->ram_payer;
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("logrampayer"),
+        make_tuple(owner, asset_itr->asset_id, old_ram_payer, owner)
+    ).send();
+
+    owner_assets.modify(asset_itr, owner, [&](auto &_asset) {
+        _asset.ram_payer = owner;
+    });
+}
+
+
 /**
 * This action is used to add a zero value asset to the quantities vector of owner in the balances table
 * If no row exists for owner, a new one is created

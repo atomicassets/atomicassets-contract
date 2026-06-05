@@ -134,6 +134,11 @@ public:
         uint64_t asset_id
     );
 
+    ACTION setlastpayer(
+        name owner,
+        name collection_name
+    );
+
 
     ACTION announcedepo(
         name owner,
