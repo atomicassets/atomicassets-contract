@@ -1004,6 +1004,73 @@ ACTION atomicassets::settempldata(
 }
 
 /**
+*  Transfers responsibility for an asset's RAM cost to its current owner
+*  The previous ram_payer is refunded the freed RAM
+*  @required_auth new_payer, who must be the current owner of the asset
+*/
+ACTION atomicassets::setrampayer(
+    name new_payer,
+    uint64_t asset_id
+) {
+    require_auth(new_payer);
+
+    assets_t owner_assets = get_assets(new_payer);
+
+    auto asset_itr = owner_assets.require_find(asset_id,
+        "No asset with this id exists in the new_payer's account");
+
+    check(asset_itr->ram_payer != new_payer,
+        "new_payer is already the ram_payer of this asset");
+
+    name old_ram_payer = asset_itr->ram_payer;
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("logrampayer"),
+        make_tuple(new_payer, asset_id, old_ram_payer, new_payer)
+    ).send();
+
+    owner_assets.modify(asset_itr, new_payer, [&](auto &_asset) {
+        _asset.ram_payer = new_payer;
+    });
+}
+
+
+ACTION atomicassets::setlastpayer(
+    name owner,
+    name collection_name
+) {
+    require_auth(owner);
+
+    assets_t owner_assets = get_assets(owner);
+
+    check(owner_assets.begin() != owner_assets.end(), "owner holds no assets");
+
+    auto asset_itr = --owner_assets.end();
+
+    check(asset_itr->collection_name == collection_name,
+        "newest owned asset is not in the expected collection");
+
+    check(asset_itr->ram_payer != owner,
+        "owner is already the ram_payer of this asset");
+
+    name old_ram_payer = asset_itr->ram_payer;
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("logrampayer"),
+        make_tuple(owner, asset_itr->asset_id, old_ram_payer, owner)
+    ).send();
+
+    owner_assets.modify(asset_itr, owner, [&](auto &_asset) {
+        _asset.ram_payer = owner;
+    });
+}
+
+
+/**
 * This action is used to add a zero value asset to the quantities vector of owner in the balances table
 * If no row exists for owner, a new one is created
 * This action needs to be called before transferring (depositing) any tokens to the AtomicAssets smart contract,
@@ -1578,6 +1645,21 @@ ACTION atomicassets::logsetdatatl(
     require_auth(get_self());
 
     notify_collection_accounts(collection_name);
+}
+
+
+ACTION atomicassets::logrampayer(
+    name asset_owner,
+    uint64_t asset_id,
+    name old_ram_payer,
+    name new_ram_payer
+) {
+    require_auth(get_self());
+
+    assets_t owner_assets = get_assets(asset_owner);
+    auto asset_itr = owner_assets.find(asset_id);
+
+    notify_collection_accounts(asset_itr->collection_name);
 }
 
 

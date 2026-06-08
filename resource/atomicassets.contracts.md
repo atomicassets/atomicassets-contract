@@ -572,6 +572,54 @@ This action may only be called with the permission of {{authorized_editor}}.
 
 
 
+<h1 class="contract">setrampayer</h1>
+
+---
+spec_version: "0.2.0"
+title: Set the RAM payer of an asset
+summary: '{{nowrap new_payer}} takes over the RAM cost of the asset with the id {{nowrap asset_id}}'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+{{new_payer}} takes over responsibility for the RAM cost of the asset with the id {{asset_id}}. The previous RAM payer is refunded the freed RAM.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of {{new_payer}}.
+
+{{new_payer}} has to be the current owner of the asset with the id {{asset_id}}.
+</div>
+
+
+
+
+<h1 class="contract">setlastpayer</h1>
+
+---
+spec_version: "0.2.0"
+title: Set the RAM payer of the newest owned asset
+summary: '{{nowrap owner}} takes over the RAM cost of the newest asset owned by {{nowrap owner}} in the collection {{nowrap collection_name}}'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+{{owner}} takes over responsibility for the RAM cost of the newest asset owned by {{owner}}. The previous RAM payer is refunded the freed RAM.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of {{owner}}.
+
+The newest asset owned by {{owner}} has to be in the collection {{collection_name}}.
+</div>
+
+
+
+
 <h1 class="contract">announcedepo</h1>
 
 ---

@@ -186,6 +186,16 @@ public:
         ATTRIBUTE_MAP new_mutable_data
     );
 
+    ACTION setrampayer(
+        name new_payer,
+        uint64_t asset_id
+    );
+
+    ACTION setlastpayer(
+        name owner,
+        name collection_name
+    );
+
 
     ACTION announcedepo(
         name owner,
@@ -302,9 +312,16 @@ public:
     ACTION logsetdatatl(
         name collection_name,
         name schema_name,
-        int32_t template_id, 
+        int32_t template_id,
         ATTRIBUTE_MAP old_data,
         ATTRIBUTE_MAP new_data
+    );
+
+    ACTION logrampayer(
+        name asset_owner,
+        uint64_t asset_id,
+        name old_ram_payer,
+        name new_ram_payer
     );
 
     ACTION logbackasset(
