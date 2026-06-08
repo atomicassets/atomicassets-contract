@@ -12,7 +12,11 @@ patch-abi:
 
 # Build the distributable artifacts (wasm + legacy-compatible abi) for release /
 # `cleos set contract`. Do NOT use for running tests — use `make build`.
-release: build patch-abi
+# Sequence build -> patch-abi via sub-makes so `make -j release` cannot start
+# patch-abi before build has produced build/atomicassets.abi.
+release:
+	$(MAKE) build
+	$(MAKE) patch-abi
 
 export-memory:
 	wasm2wat build/atomicassets.wasm | sed -e 's|(memory |(memory (export "memory") |' > atomicassets.wat
