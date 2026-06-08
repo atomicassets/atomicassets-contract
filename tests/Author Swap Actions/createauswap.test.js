@@ -50,7 +50,8 @@ describe('test createauswap contract', () => {
         expect(authorSwaps[0].new_author).toBe(user2.name.toString());
 
         // With active permission, acceptance_date should be current time + 1 week
-        const currentTime = blockchain.timestamp.toMilliseconds();
+        // acceptance_date is stored as sec_since_epoch, so compare in seconds.
+        const currentTime = Math.floor(blockchain.timestamp.toMilliseconds() / 1000);
         const oneWeek = 60 * 60 * 24 * 7;
         expect(parseInt(authorSwaps[0].acceptance_date)).toBe(currentTime + oneWeek);
     });
@@ -82,7 +83,8 @@ describe('test createauswap contract', () => {
         expect(authorSwaps[0].new_author).toBe(user2.name.toString());
 
         // With owner permission, acceptance_date should be current time (immediate)
-        const currentTime = blockchain.timestamp.toMilliseconds();
+        // acceptance_date is stored as sec_since_epoch, so compare in seconds.
+        const currentTime = Math.floor(blockchain.timestamp.toMilliseconds() / 1000);
         expect(parseInt(authorSwaps[0].acceptance_date)).toBe(currentTime);
     });
 

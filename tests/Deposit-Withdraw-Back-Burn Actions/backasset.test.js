@@ -45,7 +45,7 @@ describe("test backasset contract", () => {
         ]).send(`${user1.name.toString()}@active`);
     });
 
-    test("throw backing has been depcrecated", async () => {
+    test("throw backing has been deprecated", async () => {
         // Back the asset
         await expect(atomicassets.actions.backasset([
             user1.name.toString(),
