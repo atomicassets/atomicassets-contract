@@ -1047,7 +1047,10 @@ ACTION atomicassets::setlastpayer(
 
     check(owner_assets.begin() != owner_assets.end(), "owner holds no assets");
 
-    auto asset_itr = --owner_assets.end();
+    // Decrement a named (lvalue) iterator rather than the end() temporary, which
+    // is ill-formed for typical multi_index iterators.
+    auto asset_itr = owner_assets.end();
+    --asset_itr;
 
     check(asset_itr->collection_name == collection_name,
         "newest owned asset is not in the expected collection");
