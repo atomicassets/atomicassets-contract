@@ -152,7 +152,7 @@ describe("test announcedepo contract", () => {
         await atomicassets.actions.addconftoken([
             "eosio.token",
             "8,WAX"
-        ]);
+        ]).send(`${atomicassets.name.toString()}@active`);
 
         await expect(atomicassets.actions.announcedepo([
             user1.name.toString(),
