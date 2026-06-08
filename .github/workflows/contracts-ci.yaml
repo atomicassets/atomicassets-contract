@@ -11,6 +11,7 @@ on:
   push:
     branches: [master, feat/v2-integration, feat/v2-tests-integration, "ci/**"]
   pull_request:
+    branches: [master, feat/v2-integration, feat/v2-tests-integration]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +23,8 @@ concurrency:
 
 env:
   CDT_VERSION: "4.1.1"
+  # sha256 of cdt_4.1.1-1_amd64.deb from the AntelopeIO/cdt v4.1.1 release.
+  CDT_SHA256: "d946e6b64f297442d19e486401aa49f956080b07a1fa6335f29976106175b588"
   NODE_VERSION: "20"
 
 defaults:
@@ -48,6 +51,7 @@ jobs:
         if: steps.harness.outputs.present == 'true'
         run: |
           wget -q "https://github.com/AntelopeIO/cdt/releases/download/v${CDT_VERSION}/cdt_${CDT_VERSION}-1_amd64.deb" -O /tmp/cdt.deb
+          echo "${CDT_SHA256}  /tmp/cdt.deb" | sha256sum -c -
           sudo apt-get update
           sudo apt-get install -y /tmp/cdt.deb
           rm -f /tmp/cdt.deb
