@@ -67,15 +67,19 @@ def main(path: str) -> None:
                 field["type"] = "uint8[]"
                 bytes_fixes += 1
 
-    # Fail closed: no stray pair field names may remain on any struct.
+    # Fail closed: no stray pair field names may remain on a pair_* struct (the
+    # rename above must have covered them all). Non-pair structs are NOT checked —
+    # a struct could legitimately have a field literally named `first`/`second`,
+    # and we never touch those.
     leftover = [
         struct["name"]
         for struct in abi.get("structs", [])
+        if struct["name"].startswith("pair_")
         for field in struct.get("fields", [])
         if field["name"] in PAIR_FIELDS
     ]
     if leftover:
-        sys.exit(f"patch-abi: refusing — first/second remain on structs: {sorted(set(leftover))}")
+        sys.exit(f"patch-abi: refusing — first/second remain on pair_* structs: {sorted(set(leftover))}")
 
     with open(path, "w") as fh:
         json.dump(abi, fh, indent=4)

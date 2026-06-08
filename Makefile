@@ -19,6 +19,6 @@ export-memory:
 	wat2wasm -o build/atomicassets.wasm atomicassets.wat
 	rm atomicassets.wat
 
-.PHONY: build patch-abi release clean
+.PHONY: build patch-abi release export-memory clean
 clean:
 	-rm -rf build
