@@ -1,0 +1,77 @@
+name: Contracts CI
+
+# Builds the AtomicAssets contract with the pinned CDT and runs the VeRT
+# (@vaulta/vert) test suite. Runs on GitHub-hosted runners using the public CDT
+# release (the FACINGS monorepo's self-hosted + private-GHCR CI cannot be reached
+# from this public org). The "harness guard" lets the workflow live on `master`
+# (which has no test harness until v2 lands) without failing — it skips cleanly
+# there and runs for real once Makefile/package.json/tests/ are present.
+
+on:
+  push:
+    branches: [master, feat/v2-integration, feat/v2-tests-integration, "ci/**"]
+  pull_request:
+    branches: [master, feat/v2-integration, feat/v2-tests-integration]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contracts-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CDT_VERSION: "4.1.1"
+  # sha256 of cdt_4.1.1-1_amd64.deb from the AntelopeIO/cdt v4.1.1 release.
+  CDT_SHA256: "d946e6b64f297442d19e486401aa49f956080b07a1fa6335f29976106175b588"
+  NODE_VERSION: "20"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Check for test harness
+        id: harness
+        run: |
+          if [ -f Makefile ] && [ -f package.json ] && [ -d tests ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No contract test harness on this ref — skipping build + tests."
+          fi
+
+      - name: Install CDT
+        if: steps.harness.outputs.present == 'true'
+        run: |
+          wget -q "https://github.com/AntelopeIO/cdt/releases/download/v${CDT_VERSION}/cdt_${CDT_VERSION}-1_amd64.deb" -O /tmp/cdt.deb
+          echo "${CDT_SHA256}  /tmp/cdt.deb" | sha256sum -c -
+          sudo apt-get update
+          sudo apt-get install -y /tmp/cdt.deb
+          rm -f /tmp/cdt.deb
+          cdt-cpp --version
+
+      - name: Setup Node
+        if: steps.harness.outputs.present == 'true'
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+
+      - name: Install dependencies
+        if: steps.harness.outputs.present == 'true'
+        run: yarn install --frozen-lockfile
+
+      - name: Build contract (raw CDT abi — the suite expects this)
+        if: steps.harness.outputs.present == 'true'
+        run: make build
+
+      - name: Run VeRT test suite
+        if: steps.harness.outputs.present == 'true'
+        run: npx jest --ci
