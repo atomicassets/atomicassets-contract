@@ -1,7 +1,10 @@
 # Authors and credits
 
-AtomicAssets was created by [pink.network](https://pink.network) (the original v1
-standard and contract).
+AtomicAssets is an open NFT standard, created by [Pink Network](https://pink.gg)
+(the original v1 standard and contract), who also built AtomicHub, the original
+AtomicAssets marketplace. Ownership of AtomicHub and the related software passed from
+Pink Network to Spielworks (Spielworks Markets GmbH), and then to FACINGS, the current
+owner and maintainer.
 
 ## AtomicAssets v2
 
