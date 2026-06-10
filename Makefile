@@ -1,6 +1,16 @@
 build:
 	mkdir -p build
 	cdt-cpp -abigen -contract=atomicassets -I./include src/atomicassets.cpp -o build/atomicassets.wasm
+	$(MAKE) build-test-consumer
+
+# Test-only fixture: a minimal EXTERNAL contract that reads atomicassets tables
+# through include/atomicassets-interface.hpp. Catches header regressions the
+# main suite cannot see (atomicassets itself never includes that header) — e.g.
+# the get_self()-vs-ATOMICASSETS_ACCOUNT anchoring bug fixed in PR #21. Consumed
+# by the "Interface Header" VeRT tests; NOT a release artifact.
+build-test-consumer:
+	mkdir -p build
+	cdt-cpp -abigen -contract=ifaceconsumr -I./include tests/fixtures/interface-consumer/interface-consumer.cpp -o build/interface-consumer.wasm
 
 # Release-only ABI normalization. CDT 4.1 changed two -abigen spellings
 # (pair fields first/second; vector<uint8_t> as `bytes`) that break existing
@@ -23,6 +33,6 @@ export-memory:
 	wat2wasm -o build/atomicassets.wasm atomicassets.wat
 	rm atomicassets.wat
 
-.PHONY: build patch-abi release export-memory clean
+.PHONY: build build-test-consumer patch-abi release export-memory clean
 clean:
 	-rm -rf build
