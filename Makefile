@@ -7,7 +7,7 @@ build:
 # through include/atomicassets-interface.hpp. Catches header regressions the
 # main suite cannot see (atomicassets itself never includes that header) — e.g.
 # the get_self()-vs-ATOMICASSETS_ACCOUNT anchoring bug fixed in PR #21. Consumed
-# by the "Interface Header" VeRT tests; NOT a release artifact.
+# by the interface-header VeRT tests; NOT a release artifact.
 build-test-consumer:
 	mkdir -p build
 	cdt-cpp -abigen -contract=ifaceconsumr -I./include tests/fixtures/interface-consumer/interface-consumer.cpp -o build/interface-consumer.wasm
