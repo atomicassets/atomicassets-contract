@@ -109,7 +109,7 @@ describe("partial_read_collection byte-math (A-BYTEMATH)", () => {
     // FIXED: at the max 24 authorized + 24 notify (N + M = 48, formerly an overflow),
     // the auth path early-returns after authorized_accounts and no longer over-reads
     // notify_accounts, so the authorized action succeeds. This is the regression guard
-    // for the A-BYTEMATH fix — it FAILS (throws) against an unfixed build.
+    // for the A-BYTEMATH fix, it FAILS (throws) against an unfixed build.
     test("auth path succeeds at 24 authorized + 24 notify (max caps) after the early-return fix", async () => {
         await makeCollection(24, 24, true);
 
