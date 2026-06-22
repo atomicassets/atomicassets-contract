@@ -224,6 +224,12 @@ ACTION atomicassets::createcol(
 
     check(allow_notify || notify_accounts.size() == 0, "Can't add notify_accounts if allow_notify is false");
 
+    // createcol writes both vectors verbatim; cap them at 24 like addcolauth/addnotifyacc, and
+    // before the loops below so an oversized vector fails fast. The cap keeps partial_read_collection
+    // within its read budget.
+    check(authorized_accounts.size() <= 24, "Can only have up to 24 authorized accounts");
+    check(notify_accounts.size() <= 24, "Can only have up to 24 notify accounts");
+
     for (auto itr = authorized_accounts.begin(); itr != authorized_accounts.end(); itr++) {
         check(is_account(*itr), string("At least one account does not exist - " + itr->to_string()).c_str());
         check(std::find(authorized_accounts.begin(), authorized_accounts.end(), *itr) == itr,
