@@ -14,7 +14,7 @@
   every downstream consumer.
 
   Built by `make build` into build/interface-consumer.{wasm,abi}; deployed by
-  tests/"Interface Header"/interface-consumer.test.js at account `ifaceconsumr`.
+  tests/interface-header/interface-consumer.test.js at account `ifaceconsumr`.
   NOT a distributable artifact.
 */
 
