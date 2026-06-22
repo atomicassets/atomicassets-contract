@@ -4,7 +4,7 @@ const { Blockchain } = require("@vaulta/vert");
   Interface-header consumer coverage.
 
   atomicassets-interface.hpp is consumed by EXTERNAL contracts (atomicpacks,
-  atomictools, atomicbridge, ...), never by atomicassets itself — so the main
+  atomictools, atomicbridge, ...), never by atomicassets itself, so the main
   suite cannot catch regressions in it. These tests deploy a minimal consumer
   contract (tests/fixtures/interface-consumer, built by `make build`) at the
   account `ifaceconsumr` and read AtomicAssets tables THROUGH the header.

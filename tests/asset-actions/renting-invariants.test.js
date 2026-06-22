@@ -173,7 +173,7 @@ describe("renting invariants characterization (burn / transfer of a held asset)"
         });
     });
 
-    // A-XFER-RENTED (transfer TO the current holder): the rental "settles" — the
+    // A-XFER-RENTED (transfer TO the current holder): the rental "settles", the
     // holders row is erased and the asset row moves to the holder, who now owns
     // it outright.
     test("CURRENT BEHAVIOR: owner transfers a rented-out asset to the holder (holdership settles)", async () => {

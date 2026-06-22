@@ -10,7 +10,7 @@
   from a contract account that is NOT `atomicassets`. If the header's table
   getters ever anchor at get_self() again (the v2 regression fixed in PR #21),
   every lookup targets this contract's own (empty) scope and the checks below
-  fail — turning the regression into a red test instead of a silent break for
+  fail, turning the regression into a red test instead of a silent break for
   every downstream consumer.
 
   Built by `make build` into build/interface-consumer.{wasm,abi}; deployed by
