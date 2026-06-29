@@ -148,17 +148,21 @@ namespace atomicassets {
     typedef multi_index <name("assets"), assets_s> assets_t;
 
 
-    struct holders_s {
+    struct leases_s {
         uint64_t         asset_id;
-        name             holder;
-        name             owner;
+        name             title_owner;
+        name             renter;
+        uint32_t         rental_end;
+        name             market;
 
-        uint64_t primary_key() const { return asset_id; };
-        uint64_t by_holder() const { return holder.value; };
+        uint64_t primary_key()    const { return asset_id; };
+        uint64_t by_title_owner() const { return title_owner.value; };
+        uint64_t by_rental_end()  const { return (uint64_t) rental_end; };
     };
-    typedef multi_index <name("holders"), holders_s,  
-        indexed_by<name("holder"), const_mem_fun <holders_s, uint64_t, &holders_s::by_holder>>>
-    holders_t;
+    typedef multi_index <name("leases"), leases_s,
+        indexed_by<name("titleowner"), const_mem_fun <leases_s, uint64_t, &leases_s::by_title_owner>>,
+        indexed_by<name("rentalend"),  const_mem_fun <leases_s, uint64_t, &leases_s::by_rental_end>>>
+    leases_t;
 
 
     struct offers_s {
@@ -197,6 +201,7 @@ namespace atomicassets {
         uint64_t                 offer_counter     = 1;
         vector <FORMAT>          collection_format = {};
         vector <extended_symbol> supported_tokens  = {};
+        name                     rental_market     = name("atomicmarket");
     };
     typedef singleton <name("config"), config_s>               config_t;
 
@@ -228,6 +233,6 @@ namespace atomicassets {
     template_mutables_t get_template_mutables(name collection_name) {return template_mutables_t(get_self(), collection_name.value);}
 
     assets_t            get_assets(name owner) {return assets_t(get_self(), owner.value);}
-    holders_t           get_holders() {return holders_t(get_self(), get_self().value);}
+    leases_t            get_leases() {return leases_t(get_self(), get_self().value);}
 
 };

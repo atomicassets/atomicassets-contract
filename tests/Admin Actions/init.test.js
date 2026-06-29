@@ -28,7 +28,8 @@ describe('test init contract', () => {
             "template_counter": 1,
             "offer_counter": 1,
             "collection_format": [],
-            "supported_tokens": []
+            "supported_tokens": [],
+            "rental_market": "atomicmarket"
         });
     });
 
@@ -50,7 +51,8 @@ describe('test init contract', () => {
             "template_counter": 1,
             "offer_counter": 1,
             "collection_format": [{"name": "name", "type": "string"}],
-            "supported_tokens": []
+            "supported_tokens": [],
+            "rental_market": "atomicmarket"
         });
     });
 

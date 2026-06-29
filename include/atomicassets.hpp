@@ -34,12 +34,37 @@ public:
         string memo
     );
 
-    ACTION move(
-        name owner,
-        name from,
-        name to,
-        vector <uint64_t> asset_ids,
+    ACTION setrentmkt(
+        name rental_market
+    );
+
+    ACTION pretitle(
+        name title_owner,
+        name market,
+        uint64_t asset_id
+    );
+
+    ACTION leasestart(
+        name market,
+        name title_owner,
+        name renter,
+        uint64_t asset_id,
+        uint32_t rental_end,
         string memo
+    );
+
+    ACTION leaseextend(
+        name market,
+        uint64_t asset_id,
+        uint32_t rental_end
+    );
+
+    ACTION delpretitle(
+        uint64_t asset_id
+    );
+
+    ACTION reclaim(
+        uint64_t asset_id
     );
 
     ACTION createcol(
@@ -260,13 +285,20 @@ public:
         string memo
     );
 
-    ACTION logmove(
+    ACTION loglock(
         name collection_name,
-        name owner,
-        name from,
-        name to,
-        vector <uint64_t> asset_ids,
-        string memo
+        uint64_t asset_id,
+        name title_owner,
+        name renter,
+        uint32_t rental_end,
+        name market
+    );
+
+    ACTION logreclaim(
+        name collection_name,
+        uint64_t asset_id,
+        name title_owner,
+        name renter
     );
 
     ACTION lognewoffer(
@@ -438,17 +470,29 @@ private:
     typedef multi_index <name("assets"), assets_s> assets_t;
 
 
-    TABLE holders_s {
+    // Non-custodial rental "title" / lock record. The existence of a row for an
+    // asset_id means the asset is LOCKED (no transfer/burn/offer-out/sale). Two
+    // states:
+    //   pretitle sentinel: renter == name(""), rental_end == 0 — the lister has
+    //       pre-locked the asset and consented to `market`; owner is still the
+    //       lister.
+    //   active lease:      renter != name(""), rental_end > 0 — the renter is the
+    //       real AtomicAssets owner; title_owner holds the reclaim right.
+    TABLE leases_s {
         uint64_t         asset_id;
-        name             holder;
-        name             owner;
+        name             title_owner;   // lister; reclaim returns the asset here
+        name             renter;        // current AA owner during the lease
+        uint32_t         rental_end;    // sec_since_epoch; 0 for a pretitle sentinel
+        name             market;        // rental market that opened/manages the lease
 
-        uint64_t primary_key() const { return asset_id; };
-        uint64_t by_holder() const { return holder.value; };
+        uint64_t primary_key()    const { return asset_id; };
+        uint64_t by_title_owner() const { return title_owner.value; };
+        uint64_t by_rental_end()  const { return (uint64_t) rental_end; };
     };
-    typedef multi_index <name("holders"), holders_s,  
-        indexed_by<name("holder"), const_mem_fun <holders_s, uint64_t, &holders_s::by_holder>>>
-    holders_t;
+    typedef multi_index <name("leases"), leases_s,
+        indexed_by<name("titleowner"), const_mem_fun <leases_s, uint64_t, &leases_s::by_title_owner>>,
+        indexed_by<name("rentalend"),  const_mem_fun <leases_s, uint64_t, &leases_s::by_rental_end>>>
+    leases_t;
 
 
     TABLE offers_s {
@@ -487,6 +531,12 @@ private:
         uint64_t                 offer_counter     = 1;
         vector <FORMAT>          collection_format = {};
         vector <extended_symbol> supported_tokens  = {};
+        // The single account authorized to open/manage non-custodial rental
+        // leases (pretitle/leasestart/leaseextend). Defaults to the AtomicMarket
+        // contract; set to name("") via setrentmkt to disable leasing.
+        // NOTE: appending this field requires re-initialising the config
+        // singleton on an existing deployment (the stored blob predates it).
+        name                     rental_market     = name("atomicmarket");
     };
     typedef singleton <name("config"), config_s>               config_t;
 
@@ -518,7 +568,7 @@ private:
     template_mutables_t get_template_mutables(name collection_name) {return template_mutables_t(get_self(), collection_name.value);}
 
     assets_t            get_assets(name owner) {return assets_t(get_self(), owner.value);}
-    holders_t           get_holders() {return holders_t(get_self(), get_self().value);}
+    leases_t            get_leases() {return leases_t(get_self(), get_self().value);}
 
     /*
         **************************
@@ -542,7 +592,8 @@ private:
         name to,
         vector <uint64_t> asset_ids,
         string memo,
-        name scope_payer
+        name scope_payer,
+        bool enforce_lock = true
     );
 
     void internal_decrease_balance(
@@ -559,6 +610,13 @@ private:
         name & account_to_check,
         name & collection_name
     );
+
+    // Reverts if the asset has a live lease/title record (i.e. is rental-locked).
+    void check_not_leased(uint64_t asset_id);
+
+    // Erases any offers created by `account` whose sender_asset_ids reference
+    // `asset_id` (offers are AtomicAssets' approval mechanism).
+    void clear_offers_for_asset(name account, uint64_t asset_id);
 
     void notify_collection_accounts(
         name collection_name
