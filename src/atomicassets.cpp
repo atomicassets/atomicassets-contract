@@ -1639,9 +1639,7 @@ ACTION atomicassets::loglock(
     require_auth(get_self());
 
     require_recipient(title_owner);
-    if (renter != name("")) {
-        require_recipient(renter);
-    }
+    require_recipient(renter);
     notify_collection_accounts(collection_name);
 }
 
@@ -1654,9 +1652,7 @@ ACTION atomicassets::logreclaim(
     require_auth(get_self());
 
     require_recipient(title_owner);
-    if (renter != name("")) {
-        require_recipient(renter);
-    }
+    require_recipient(renter);
     notify_collection_accounts(collection_name);
 }
 
