@@ -13,6 +13,13 @@ using namespace atomicdata;
 static constexpr double MAX_MARKET_FEE = 0.15;
 static constexpr uint32_t AUTHOR_SWAP_TIME_DELTA = 60 * 60 * 24 * 7; // 1 week, valid for 1 week
 
+// Defense-in-depth backstop on the non-custodial rental primitive: the protocol caps any single
+// lease (and any extension, measured from the lease's fixed rental_start) at this duration so a
+// compromised or buggy configured rental_market cannot mint a near-permanent (~year 2106) lock on
+// an asset. The product-level limit lives in the rental market (AtomicMarket enforces the same
+// 28 days); this is the hard protocol ceiling regardless of which market is configured.
+static constexpr uint32_t MAX_LEASE_SECONDS = 60 * 60 * 24 * 28; // 28 days
+
 static constexpr char COLLECTION_NOT_FOUND[] = "No collection with this name exists";
 
 CONTRACT atomicassets : public contract {

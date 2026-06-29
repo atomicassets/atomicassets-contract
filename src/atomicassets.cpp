@@ -124,6 +124,10 @@ ACTION atomicassets::leasestart(
     uint32_t now = eosio::current_time_point().sec_since_epoch();
     check(rental_end > now, "rental_end must be in the future");
 
+    // Protocol backstop: cap the lease duration so a compromised/buggy rental market cannot
+    // mint a near-permanent lock. The market enforces its own (tighter) product limit on top.
+    check(rental_end - now <= MAX_LEASE_SECONDS, "rental_end exceeds the maximum lease duration");
+
     leases_t leases = get_leases();
     check(leases.find(asset_id) == leases.end(), "Asset is already leased");
 
@@ -188,6 +192,11 @@ ACTION atomicassets::leaseextend(
 
     check(rental_end > lease_itr->rental_end, "rental_end must be later than the current end");
 
+    // Protocol backstop: cap the TOTAL lease window from the fixed rental_start (not from "now"),
+    // so repeated extensions can't roll the asset forward indefinitely past the maximum.
+    check(rental_end - lease_itr->rental_start <= MAX_LEASE_SECONDS,
+        "rental_end exceeds the maximum lease duration");
+
     name title_owner = lease_itr->title_owner;
     name renter = lease_itr->renter;
 
@@ -234,9 +243,14 @@ ACTION atomicassets::reclaim(
 
     // Erase the lock, then move the asset back under the contract's own authority
     // (enforce_lock=false). The contract pays any transient scope RAM so reclaim
-    // never needs the title_owner's or renter's signature. A pre-existing offer
-    // referencing the asset is left in place (it could not settle while locked,
-    // and becomes valid again now that the asset is back with its owner).
+    // never needs the title_owner's or renter's signature. The move emits the normal
+    // logtransfer (notifying the asset's collection), and logreclaim below notifies
+    // the collection of the structured reclaim event. Crucially, NEITHER notifies the
+    // renter or title_owner: a renter is an arbitrary (possibly hostile) account, and
+    // notifying it would let it abort this guaranteed revert by throwing in a handler
+    // and trap the asset forever. A pre-existing offer referencing the asset is left
+    // in place (it could not settle while locked, and becomes valid again now that the
+    // asset is back with its owner).
     leases.erase(lease_itr);
     internal_transfer(renter, title_owner, vector<uint64_t>{asset_id}, "lease reclaim", get_self(), false);
 
@@ -1647,8 +1661,17 @@ ACTION atomicassets::logreclaim(
 ) {
     require_auth(get_self());
 
-    require_recipient(title_owner);
-    require_recipient(renter);
+    // The asset's collection is notified of the reclaim (mirrors loglock on lease-start), so a
+    // collection can react to its assets returning. This trusts collections not to grief their
+    // own collection: a collection notify-account that throws here CAN abort the reclaim and trap
+    // the asset, which is accepted under the same trust model that lets collections gate transfers.
+    //
+    // Deliberately NO require_recipient(renter) / require_recipient(title_owner): reclaim is the
+    // permissionless guaranteed revert the whole model rests on. The renter is an arbitrary,
+    // possibly hostile account that profits from keeping the asset; notifying it would hand it a
+    // veto (throw in a handler -> abort the reclaim -> asset trapped forever). The title_owner is
+    // the beneficiary and learns of the reclaim by receiving the asset and this trace, so there is
+    // no reason to give it an abort lever either.
     notify_collection_accounts(collection_name);
 }
 

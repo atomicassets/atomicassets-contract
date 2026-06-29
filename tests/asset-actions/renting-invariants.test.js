@@ -18,9 +18,11 @@ describe("non-custodial rental primitives", () => {
     let lister;   // title_owner / lessor
     let renter;   // becomes the AA owner during the lease
     let third;    // unrelated third party / random reclaim caller
+    let evil;     // adversary contract: throws on the atomicassets::logreclaim notification
 
     const ASSET1 = "1099511627776"; // 2^40, first minted asset id
     const ONE_HOUR = 3600;
+    const MAX_LEASE_SECONDS = 60 * 60 * 24 * 28; // mirrors the contract's protocol backstop
 
     function nowSec() {
         return Math.floor(blockchain.timestamp.toMilliseconds() / 1000);
@@ -44,6 +46,8 @@ describe("non-custodial rental primitives", () => {
         lister = blockchain.createAccount('lister');
         renter = blockchain.createAccount('renter');
         third = blockchain.createAccount('thirduser11');
+        // Adversary contract that vetoes the reclaim notification (see fixtures/evil-renter).
+        evil = blockchain.createContract('evilrenter11', './build/evil-renter');
     });
 
     beforeEach(async () => {
@@ -341,5 +345,89 @@ describe("non-custodial rental primitives", () => {
             1
         ]).send(`${third.name.toString()}@active`)).resolves.not.toThrow();
         expect(assetsOf(third).map((a) => a.asset_id)).toContain(ASSET1);
+    });
+
+    // ----------------------------------- the RENTER cannot veto the permissionless reclaim
+    // The permissionless reclaim is the model's guaranteed revert. The renter is an
+    // arbitrary, possibly hostile account that profits from keeping the asset, so it
+    // must NEVER be able to abort the reclaim by throwing in a notification handler.
+    // The `evil` fixture throws on the atomicassets::logreclaim notification; reclaim
+    // no longer notifies the renter, so the veto can't fire.
+    // (Re-adding require_recipient(renter) to logreclaim makes this test RED.)
+
+    test("a malicious renter contract cannot veto the permissionless reclaim", async () => {
+        await mint();
+        // lease to the EVIL contract account; it becomes the real owner. loglock is
+        // delivered at lease-start but evil only vetoes logreclaim, so this succeeds.
+        const rentalEnd = nowSec() + ONE_HOUR;
+        await atomicassets.actions.leasestart([
+            lister.name.toString(), evil.name.toString(),
+            ASSET1, rentalEnd, "lease to evil renter"
+        ]).send(`${market.name.toString()}@active`);
+        expect(assetsOf(evil)).toHaveLength(1);
+
+        blockchain.addTime(TimePoint.fromMilliseconds((ONE_HOUR + 1) * 1000));
+
+        // the renter is no longer notified on reclaim, so its veto never fires
+        await expect(atomicassets.actions.reclaim([
+            ASSET1
+        ]).send(`${third.name.toString()}@active`)).resolves.not.toThrow();
+
+        expect(assetsOf(evil)).toHaveLength(0);
+        expect(assetsOf(lister).map((a) => a.asset_id)).toContain(ASSET1);
+        expect(leases()).toEqual([]); // lock cleared, asset returned
+    });
+
+    test("the collection IS notified on reclaim (trusted; can react, by design)", async () => {
+        // By design reclaim notifies the asset's collection (mirrors loglock on
+        // lease-start) so collections can react to their assets returning. This is a
+        // deliberate trust tradeoff: a collection notify-account that throws CAN abort
+        // the reclaim — accepted under the same trust model that lets collections gate
+        // transfers, and in pointed contrast to the renter, which cannot (test above).
+        // We prove the collection is actually reached by making its notify-account the
+        // `evil` fixture (throws on logreclaim) and observing the reclaim revert.
+        await mint();
+        await atomicassets.actions.addnotifyacc([
+            "testcollect1", evil.name.toString()
+        ]).send(`${lister.name.toString()}@active`);
+
+        await leaseFor(ONE_HOUR); // ordinary renter
+        blockchain.addTime(TimePoint.fromMilliseconds((ONE_HOUR + 1) * 1000));
+
+        // the collection notify-account is in the reclaim path, so its veto reverts it
+        await expect(atomicassets.actions.reclaim([
+            ASSET1
+        ]).send(`${third.name.toString()}@active`)).rejects.toThrow("evil renter vetoes the reclaim");
+    });
+
+    // ----------------------------------------- duration cap (protocol backstop, #2)
+
+    test("leasestart rejects a rental_end beyond MAX_LEASE_SECONDS", async () => {
+        await mint();
+        const tooLong = nowSec() + MAX_LEASE_SECONDS + ONE_HOUR;
+        await expect(atomicassets.actions.leasestart([
+            lister.name.toString(), renter.name.toString(),
+            ASSET1, tooLong, "too long"
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("maximum lease duration");
+    });
+
+    test("leasestart allows a rental_end exactly at MAX_LEASE_SECONDS", async () => {
+        await mint();
+        const atCap = nowSec() + MAX_LEASE_SECONDS;
+        await expect(atomicassets.actions.leasestart([
+            lister.name.toString(), renter.name.toString(),
+            ASSET1, atCap, "at cap"
+        ]).send(`${market.name.toString()}@active`)).resolves.not.toThrow();
+        expect(assetsOf(renter)).toHaveLength(1);
+    });
+
+    test("leaseextend cannot push the total window past MAX_LEASE_SECONDS from rental_start", async () => {
+        await mint();
+        const rentalStart = nowSec();
+        await leaseFor(ONE_HOUR);
+        // total window measured from the fixed rental_start, not from "now"
+        await expect(atomicassets.actions.leaseextend([
+            ASSET1, rentalStart + MAX_LEASE_SECONDS + ONE_HOUR
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("maximum lease duration");
     });
 });
