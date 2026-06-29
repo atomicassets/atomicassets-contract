@@ -217,21 +217,21 @@ namespace atomicassets {
         *********************
     */
 
-    author_swaps_t      get_author_swaps() {return author_swaps_t(get_self(), get_self().value);}
-    collections_t       get_collections() {return collections_t(get_self(), get_self().value);}
+    author_swaps_t      get_author_swaps() {return author_swaps_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
+    collections_t       get_collections() {return collections_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
 
-    offers_t            get_offers() {return offers_t(get_self(), get_self().value);}
-    balances_t          get_balances() {return balances_t(get_self(), get_self().value);}
-    config_t            get_config() {return config_t(get_self(), get_self().value);}
-    tokenconfigs_t      get_tokenconfigs() {return tokenconfigs_t(get_self(), get_self().value);}
+    offers_t            get_offers() {return offers_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
+    balances_t          get_balances() {return balances_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
+    config_t            get_config() {return config_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
+    tokenconfigs_t      get_tokenconfigs() {return tokenconfigs_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
 
-    schemas_t           get_schemas(name collection_name) {return schemas_t(get_self(), collection_name.value);}
-    schema_types_t      get_schema_types(name collection_name) {return schema_types_t(get_self(), collection_name.value);}
+    schemas_t           get_schemas(name collection_name) {return schemas_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
+    schema_types_t      get_schema_types(name collection_name) {return schema_types_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
 
-    templates_t         get_templates(name collection_name) {return templates_t(get_self(), collection_name.value);}
-    template_mutables_t get_template_mutables(name collection_name) {return template_mutables_t(get_self(), collection_name.value);}
+    templates_t         get_templates(name collection_name) {return templates_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
+    template_mutables_t get_template_mutables(name collection_name) {return template_mutables_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
 
-    assets_t            get_assets(name owner) {return assets_t(get_self(), owner.value);}
-    leases_t            get_leases() {return leases_t(get_self(), get_self().value);}
+    assets_t            get_assets(name owner) {return assets_t(ATOMICASSETS_ACCOUNT, owner.value);}
+    leases_t            get_leases() {return leases_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
 
 };

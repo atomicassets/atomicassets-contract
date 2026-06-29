@@ -211,4 +211,48 @@ describe('test createcol contract', () => {
             []
         ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("missing required authority");
     });
+
+    // createcol writes authorized_accounts / notify_accounts verbatim. addcolauth and
+    // addnotifyacc cap each at 24; createcol must enforce the same cap, otherwise a single
+    // createcol can seed a collection past the partial_read_collection read window and brick
+    // its own auth/notify path. These guard that the cap is enforced at creation too.
+    describe('24-account caps (match addcolauth / addnotifyacc)', () => {
+        const NAME_CHARS = "abcdefghijklmnopqrstuvwxyz12345"; // valid eosio name chars
+        function genName(i) {
+            let n = i, s = "";
+            for (let k = 0; k < 8; k++) { s += NAME_CHARS[n % 31]; n = Math.floor(n / 31); }
+            return ("cap" + s).slice(0, 12);
+        }
+        let pool; // 48 distinct accounts: [0,24) auth, [24,48) notify
+        beforeAll(() => {
+            pool = [];
+            for (let i = 0; i < 48; i++) pool.push(blockchain.createAccount(genName(i)).name.toString());
+        });
+
+        test("throw when createcol has 25 authorized accounts", async () => {
+            await expect(atomicassets.actions.createcol([
+                user1.name.toString(), "testcollect1", true,
+                pool.slice(0, 25), [], 0.05, []
+            ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("Can only have up to 24 authorized accounts");
+        });
+
+        test("throw when createcol has 25 notify accounts", async () => {
+            await expect(atomicassets.actions.createcol([
+                user1.name.toString(), "testcollect1", true,
+                [user1.name.toString()], pool.slice(0, 25), 0.05, []
+            ]).send(`${user1.name.toString()}@active`)).rejects.toThrow("Can only have up to 24 notify accounts");
+        });
+
+        test("allow createcol at the 24 authorized + 24 notify boundary", async () => {
+            await expect(atomicassets.actions.createcol([
+                user1.name.toString(), "testcollect1", true,
+                pool.slice(0, 24), pool.slice(24, 48), 0.05, []
+            ]).send(`${user1.name.toString()}@active`)).resolves.not.toThrow();
+
+            const collections = atomicassets.tables.collections(nameToBigInt(atomicassets.name)).getTableRows();
+            expect(collections).toHaveLength(1);
+            expect(collections[0].authorized_accounts).toHaveLength(24);
+            expect(collections[0].notify_accounts).toHaveLength(24);
+        });
+    });
 });
