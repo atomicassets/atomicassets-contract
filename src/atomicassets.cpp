@@ -87,7 +87,8 @@ ACTION atomicassets::transfer(
 
 /**
 *  Sets the single account authorized to open/manage non-custodial rental leases
-*  (pretitle / leasestart / leaseextend). name("") disables leasing entirely.
+*  (leasestart / leaseextend). name("") disables leasing entirely. Stored in its
+*  own `rentalcfg` singleton so it needs no migration of the existing config row.
 *  @required_auth The contract itself
 */
 ACTION atomicassets::setrentmkt(name rental_market) {
@@ -96,69 +97,16 @@ ACTION atomicassets::setrentmkt(name rental_market) {
     check(rental_market == name("") || is_account(rental_market),
         "rental_market account does not exist");
 
-    auto config = get_config();
-    config_s current_config = config.get();
-    current_config.rental_market = rental_market;
-    config.set(current_config, get_self());
-}
-
-
-/**
-*  Pre-locks an asset for non-custodial rental and records the lister's consent
-*  to `market` BEFORE any renter exists. Owner stays the lister; the asset is
-*  immediately locked (a lease row exists). This is the lister-signed half of the
-*  hybrid lease-start handshake — the market can later activate a lease only on
-*  assets that carry such a row, capping the market's blast radius.
-*  @required_auth title_owner
-*/
-ACTION atomicassets::pretitle(
-    name title_owner,
-    name market,
-    uint64_t asset_id
-) {
-    require_auth(title_owner);
-
-    auto config = get_config();
-    config_s current_config = config.get();
-    check(current_config.rental_market != name("") && market == current_config.rental_market,
-        "market is not the configured rental market");
-
-    assets_t owner_assets = get_assets(title_owner);
-    auto asset_itr = owner_assets.require_find(asset_id,
-        "title_owner does not own this asset");
-
-    // A non-transferable asset can never be leased out.
-    if (asset_itr->template_id >= 0) {
-        templates_t collection_templates = get_templates(asset_itr->collection_name);
-        auto template_itr = collection_templates.find(asset_itr->template_id);
-        check(template_itr->transferable, "The asset is not transferable");
-    }
-
-    leases_t leases = get_leases();
-    check(leases.find(asset_id) == leases.end(), "Asset is already leased or pre-titled");
-
-    leases.emplace(title_owner, [&](auto &_lease) {
-        _lease.asset_id    = asset_id;
-        _lease.title_owner = title_owner;
-        _lease.renter      = name("");
-        _lease.rental_end  = 0;
-        _lease.market      = market;
-    });
-
-    action(
-        permission_level{get_self(), name("active")},
-        get_self(),
-        name("loglock"),
-        make_tuple(asset_itr->collection_name, asset_id, title_owner, name(""), (uint32_t) 0, market)
-    ).send();
+    get_rentalcfg().set(rentalcfg_s{rental_market}, get_self());
 }
 
 
 /**
 *  Opens a non-custodial rental lease: makes `renter` the real AtomicAssets owner
 *  of the asset and parks the lister's reclaim right in the lease record, with NO
-*  unlocked window (the lease row is written before the ownership flip). May
-*  activate an existing pretitle sentinel or open a lease directly.
+*  unlocked window (the lease row is written before the ownership flip). The
+*  configured rental market is trusted to have verified the lister's consent (on
+*  AtomicMarket the lister's announcerent carries that authorization).
 *  @required_auth market (must be the configured rental_market)
 */
 ACTION atomicassets::leasestart(
@@ -169,12 +117,7 @@ ACTION atomicassets::leasestart(
     uint32_t rental_end,
     string memo
 ) {
-    require_auth(market);
-
-    auto config = get_config();
-    config_s current_config = config.get();
-    check(current_config.rental_market != name("") && market == current_config.rental_market,
-        "market is not the configured rental market");
+    check_rental_market(market);
 
     check(is_account(renter), "renter account does not exist");
     check(renter != title_owner, "renter and title_owner cannot be the same");
@@ -182,12 +125,8 @@ ACTION atomicassets::leasestart(
     uint32_t now = eosio::current_time_point().sec_since_epoch();
     check(rental_end > now, "rental_end must be in the future");
 
-    // Reject an already-active lease up front (the title_owner no longer owns the
-    // asset in that state, so the ownership check below would mask the cause).
     leases_t leases = get_leases();
-    auto lease_itr = leases.find(asset_id);
-    check(lease_itr == leases.end() || lease_itr->renter == name(""),
-        "Asset is already leased");
+    check(leases.find(asset_id) == leases.end(), "Asset is already leased");
 
     assets_t owner_assets = get_assets(title_owner);
     auto asset_itr = owner_assets.require_find(asset_id,
@@ -202,33 +141,21 @@ ACTION atomicassets::leasestart(
         check(template_itr->transferable, "The asset is not transferable");
     }
 
-    if (lease_itr == leases.end()) {
-        // Direct lease-start (no prior pretitle). Write the lock row FIRST.
-        leases.emplace(market, [&](auto &_lease) {
-            _lease.asset_id    = asset_id;
-            _lease.title_owner = title_owner;
-            _lease.renter      = renter;
-            _lease.rental_end  = rental_end;
-            _lease.market      = market;
-        });
-    } else {
-        // Activating a pretitle sentinel.
-        check(lease_itr->title_owner == title_owner, "lease title_owner mismatch");
-        check(lease_itr->renter == name(""), "Asset is already leased");
-        leases.modify(lease_itr, market, [&](auto &_lease) {
-            _lease.renter     = renter;
-            _lease.rental_end = rental_end;
-            _lease.market     = market;
-        });
-    }
-
-    // Close the stale-offer escape: drop any offers the lister created that
-    // reference this asset before it changes hands.
-    clear_offers_for_asset(title_owner, asset_id);
+    // Write the lock row FIRST so there is no instant where the asset is
+    // renter-owned but unlocked.
+    leases.emplace(market, [&](auto &_lease) {
+        _lease.asset_id    = asset_id;
+        _lease.title_owner = title_owner;
+        _lease.renter      = renter;
+        _lease.rental_end  = rental_end;
+        _lease.market      = market;
+    });
 
     // Flip ownership lister -> renter under the contract's own authority. The
     // lock is already in force, so this is the privileged (enforce_lock=false)
-    // path. The contract pays any transient scope RAM.
+    // path. The contract pays any transient scope RAM. A pre-existing offer that
+    // references the asset is intentionally left in place: it cannot settle while
+    // the asset is locked, and becomes valid again once the asset is reclaimed.
     internal_transfer(title_owner, renter, vector<uint64_t>{asset_id}, memo, get_self(), false);
 
     action(
@@ -249,16 +176,10 @@ ACTION atomicassets::leaseextend(
     uint64_t asset_id,
     uint32_t rental_end
 ) {
-    require_auth(market);
-
-    auto config = get_config();
-    config_s current_config = config.get();
-    check(current_config.rental_market != name("") && market == current_config.rental_market,
-        "market is not the configured rental market");
+    check_rental_market(market);
 
     leases_t leases = get_leases();
     auto lease_itr = leases.require_find(asset_id, "Asset is not leased");
-    check(lease_itr->renter != name(""), "Asset is pre-titled but not leased");
     check(rental_end > lease_itr->rental_end, "rental_end must be later than the current end");
 
     name title_owner = lease_itr->title_owner;
@@ -282,37 +203,6 @@ ACTION atomicassets::leaseextend(
 
 
 /**
-*  Clears a pretitle sentinel (a pre-locked asset that was never leased),
-*  unlocking it. Only valid before a lease is opened.
-*  @required_auth title_owner
-*/
-ACTION atomicassets::delpretitle(
-    uint64_t asset_id
-) {
-    leases_t leases = get_leases();
-    auto lease_itr = leases.require_find(asset_id, "Asset is not leased");
-    check(lease_itr->renter == name(""),
-        "Asset is actively leased; use reclaim after expiry");
-
-    require_auth(lease_itr->title_owner);
-
-    name title_owner = lease_itr->title_owner;
-    assets_t owner_assets = get_assets(title_owner);
-    auto asset_itr = owner_assets.require_find(asset_id, "title_owner does not own this asset");
-    name collection_name = asset_itr->collection_name;
-
-    leases.erase(lease_itr);
-
-    action(
-        permission_level{get_self(), name("active")},
-        get_self(),
-        name("logreclaim"),
-        make_tuple(collection_name, asset_id, title_owner, name(""))
-    ).send();
-}
-
-
-/**
 *  Permissionless reclaim of an expired lease: returns ownership from the renter
 *  to the title_owner and clears the lock. Callable by anyone once the lease has
 *  expired; the renter's signature is never required (the move runs under the
@@ -325,8 +215,6 @@ ACTION atomicassets::reclaim(
 ) {
     leases_t leases = get_leases();
     auto lease_itr = leases.require_find(asset_id, "Asset is not leased");
-    check(lease_itr->renter != name(""),
-        "Asset is pre-titled but not leased; use delpretitle");
 
     uint32_t now = eosio::current_time_point().sec_since_epoch();
     check(now >= lease_itr->rental_end, "Lease has not expired yet");
@@ -338,12 +226,11 @@ ACTION atomicassets::reclaim(
     auto asset_itr = renter_assets.require_find(asset_id, "renter no longer owns the asset");
     name collection_name = asset_itr->collection_name;
 
-    // Close the stale-offer escape on the renter side before the asset moves.
-    clear_offers_for_asset(renter, asset_id);
-
-    // Erase the lock, then move the asset back under the contract's own
-    // authority (enforce_lock=false). The contract pays any transient scope RAM
-    // so reclaim never needs the title_owner's signature.
+    // Erase the lock, then move the asset back under the contract's own authority
+    // (enforce_lock=false). The contract pays any transient scope RAM so reclaim
+    // never needs the title_owner's or renter's signature. A pre-existing offer
+    // referencing the asset is left in place (it could not settle while locked,
+    // and becomes valid again now that the asset is back with its owner).
     leases.erase(lease_itr);
     internal_transfer(renter, title_owner, vector<uint64_t>{asset_id}, "lease reclaim", get_self(), false);
 
@@ -2073,8 +1960,8 @@ void atomicassets::internal_transfer(
 
 /**
 *  Reverts if the asset has a live lease/title record (i.e. is rental-locked).
-*  The lock is keyed purely on the existence of a leases row, so it covers both
-*  pretitle sentinels and active leases with no post-expiry abscondment window.
+*  The lock is keyed purely on the existence of a leases row, so there is no
+*  post-expiry abscondment window.
 */
 void atomicassets::check_not_leased(uint64_t asset_id) {
     leases_t leases = get_leases();
@@ -2084,30 +1971,14 @@ void atomicassets::check_not_leased(uint64_t asset_id) {
 
 
 /**
-*  Erases any offers created by `account` whose sender_asset_ids reference
-*  `asset_id`. Offers are AtomicAssets' approval mechanism, so this closes the
-*  stale-approval escape at lease-start and reclaim.
+*  Asserts that `market` is the configured rental market and is authorized. The
+*  configured account is the single trusted opener/manager of leases.
 */
-void atomicassets::clear_offers_for_asset(name account, uint64_t asset_id) {
-    auto offers = get_offers();
-    auto offers_by_sender = offers.get_index<name("sender")>();
-
-    auto itr = offers_by_sender.lower_bound(account.value);
-    auto end_itr = offers_by_sender.upper_bound(account.value);
-    while (itr != end_itr) {
-        bool references_asset = false;
-        for (uint64_t id : itr->sender_asset_ids) {
-            if (id == asset_id) {
-                references_asset = true;
-                break;
-            }
-        }
-        if (references_asset) {
-            itr = offers_by_sender.erase(itr);
-        } else {
-            ++itr;
-        }
-    }
+void atomicassets::check_rental_market(name market) {
+    name configured = get_rentalcfg().get_or_default(rentalcfg_s{}).rental_market;
+    check(configured != name("") && market == configured,
+        "market is not the configured rental market");
+    require_auth(market);
 }
 
 

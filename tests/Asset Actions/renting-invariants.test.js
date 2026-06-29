@@ -8,12 +8,13 @@ const { TimePoint } = require("@wharfkit/antelope");
 // force-returns it to the title_owner at expiry.
 //
 // These tests cover: the lock guards on every renter-reachable extraction path,
-// the pretitle/leasestart/leaseextend lifecycle, the config-whitelisted market
-// authority, the permissionless reclaim, and offer-clearing on lease-start.
+// the leasestart/leaseextend lifecycle, the configured-market authority (stored
+// in the rentalcfg singleton), the permissionless reclaim, and the fact that a
+// pre-existing offer survives a rental rather than being cleared.
 describe("non-custodial rental primitives", () => {
     let blockchain;
     let atomicassets;
-    let market;   // configured rental market (default config = "atomicmarket")
+    let market;   // configured rental market (rentalcfg default = "atomicmarket")
     let lister;   // title_owner / lessor
     let renter;   // becomes the AA owner during the lease
     let third;    // unrelated third party / random reclaim caller
@@ -37,8 +38,8 @@ describe("non-custodial rental primitives", () => {
     beforeAll(async () => {
         blockchain = new Blockchain();
         atomicassets = blockchain.createContract('atomicassets', './build/atomicassets');
-        // The default config.rental_market is "atomicmarket", so create that
-        // account as the authorized market.
+        // The rentalcfg singleton defaults to "atomicmarket", so create that
+        // account as the authorized market (no setrentmkt needed).
         market = blockchain.createAccount('atomicmarket');
         lister = blockchain.createAccount('lister');
         renter = blockchain.createAccount('renter');
@@ -108,7 +109,7 @@ describe("non-custodial rental primitives", () => {
         return ASSET1;
     }
 
-    // Opens a lease directly (no prior pretitle) for the given duration.
+    // Opens a lease (market-signed) for the given duration.
     async function leaseFor(seconds = ONE_HOUR) {
         const rentalEnd = nowSec() + seconds;
         await atomicassets.actions.leasestart([
@@ -123,25 +124,6 @@ describe("non-custodial rental primitives", () => {
     }
 
     // ---------------------------------------------------------------- lifecycle
-
-    test("pretitle locks the asset but leaves ownership with the lister", async () => {
-        await mint();
-        await atomicassets.actions.pretitle([
-            lister.name.toString(), market.name.toString(), ASSET1
-        ]).send(`${lister.name.toString()}@active`);
-
-        // owner unchanged
-        expect(assetsOf(lister)).toHaveLength(1);
-        expect(assetsOf(renter)).toHaveLength(0);
-        // sentinel lease row present
-        expect(leases()).toEqual([{
-            asset_id: ASSET1,
-            title_owner: lister.name.toString(),
-            renter: "",
-            rental_end: 0,
-            market: market.name.toString()
-        }]);
-    });
 
     test("leasestart makes the renter the real owner and records the title", async () => {
         await mint();
@@ -161,18 +143,10 @@ describe("non-custodial rental primitives", () => {
         }]);
     });
 
-    test("leasestart can activate an existing pretitle sentinel", async () => {
+    test("leasing works out of the box on the default rentalcfg (no setrentmkt needed)", async () => {
         await mint();
-        await atomicassets.actions.pretitle([
-            lister.name.toString(), market.name.toString(), ASSET1
-        ]).send(`${lister.name.toString()}@active`);
-        const rentalEnd = await leaseFor();
-
+        await expect(leaseFor()).resolves.toBeDefined();
         expect(assetsOf(renter)).toHaveLength(1);
-        expect(leases()[0]).toMatchObject({
-            renter: renter.name.toString(),
-            rental_end: rentalEnd
-        });
     });
 
     test("throw when leasing an already-leased asset", async () => {
@@ -232,16 +206,6 @@ describe("non-custodial rental primitives", () => {
         ]).send(`${renter.name.toString()}@active`)).rejects.toThrow("leased and locked");
     });
 
-    test("a pretitle-locked asset cannot be transferred by the lister", async () => {
-        await mint();
-        await atomicassets.actions.pretitle([
-            lister.name.toString(), market.name.toString(), ASSET1
-        ]).send(`${lister.name.toString()}@active`);
-        await expect(atomicassets.actions.transfer([
-            lister.name.toString(), third.name.toString(), [ASSET1], ""
-        ]).send(`${lister.name.toString()}@active`)).rejects.toThrow("leased and locked");
-    });
-
     test("DELIBERATE NON-GUARD: collection can still setassetdata on a leased asset", async () => {
         await mint();
         await leaseFor();
@@ -280,12 +244,18 @@ describe("non-custodial rental primitives", () => {
             third.name.toString()
         ]).send(`${lister.name.toString()}@active`)).rejects.toThrow("missing required authority");
 
-        // Re-point the market to `third`, who can now open leases.
+        // Re-point the market to `third`, who can now open leases; the default
+        // market ("atomicmarket") can no longer.
         await atomicassets.actions.setrentmkt([
             third.name.toString()
         ]).send(`${atomicassets.name.toString()}@active`);
 
         const rentalEnd = nowSec() + ONE_HOUR;
+        await expect(atomicassets.actions.leasestart([
+            market.name.toString(), lister.name.toString(), renter.name.toString(),
+            ASSET1, rentalEnd, "lease"
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("not the configured rental market");
+
         await expect(atomicassets.actions.leasestart([
             third.name.toString(), lister.name.toString(), renter.name.toString(),
             ASSET1, rentalEnd, "lease"
@@ -320,52 +290,40 @@ describe("non-custodial rental primitives", () => {
         expect(leases()).toEqual([]); // lock cleared
     });
 
-    test("delpretitle clears a sentinel; reclaim refuses a sentinel", async () => {
+    test("reclaim throws when the asset is not leased", async () => {
         await mint();
-        await atomicassets.actions.pretitle([
-            lister.name.toString(), market.name.toString(), ASSET1
-        ]).send(`${lister.name.toString()}@active`);
-
-        // reclaim is for expired leases, not sentinels
         await expect(atomicassets.actions.reclaim([
             ASSET1
-        ]).send(`${third.name.toString()}@active`)).rejects.toThrow("not leased; use delpretitle");
-
-        await atomicassets.actions.delpretitle([
-            ASSET1
-        ]).send(`${lister.name.toString()}@active`);
-        expect(leases()).toEqual([]);
-        // unlocked again
-        await expect(atomicassets.actions.transfer([
-            lister.name.toString(), renter.name.toString(), [ASSET1], ""
-        ]).send(`${lister.name.toString()}@active`)).resolves.not.toThrow();
+        ]).send(`${third.name.toString()}@active`)).rejects.toThrow("not leased");
     });
 
-    // ------------------------------------------------------------ offer clearing
+    // ------------------------------------------------ offers survive a rental
 
-    test("leasestart clears a stale offer the lister created for the asset", async () => {
+    test("a pre-existing offer survives a rental and is acceptable again after reclaim", async () => {
         await mint();
-        // lister lists the asset in an out-offer BEFORE leasing
+        // lister offers the asset to `third` BEFORE leasing it
         await atomicassets.actions.createoffer([
             lister.name.toString(), third.name.toString(), [ASSET1], [], ""
         ]).send(`${lister.name.toString()}@active`);
         expect(offers()).toHaveLength(1);
 
-        await leaseFor();
-
-        // the stale offer is gone, so it can never settle around the lock
-        expect(offers()).toEqual([]);
-    });
-
-    test("reclaim clears a stale offer the renter created for the asset", async () => {
-        await mint();
         await leaseFor(ONE_HOUR);
 
-        // Force a stale renter offer into the table directly is not possible
-        // (createoffer is guarded), so this asserts the table stays clean across
-        // a reclaim — the renter could never have created one.
+        // the offer is NOT cleared by lease-start; it just can't settle while the
+        // asset is locked / owned by the renter
+        expect(offers()).toHaveLength(1);
+        await expect(atomicassets.actions.acceptoffer([
+            1
+        ]).send(`${third.name.toString()}@active`)).rejects.toThrow();
+
+        // after reclaim the asset is back with the lister and unlocked, so the same
+        // offer can now be accepted
         blockchain.addTime(TimePoint.fromMilliseconds((ONE_HOUR + 1) * 1000));
         await atomicassets.actions.reclaim([ASSET1]).send(`${third.name.toString()}@active`);
-        expect(offers()).toEqual([]);
+
+        await expect(atomicassets.actions.acceptoffer([
+            1
+        ]).send(`${third.name.toString()}@active`)).resolves.not.toThrow();
+        expect(assetsOf(third).map((a) => a.asset_id)).toContain(ASSET1);
     });
 });

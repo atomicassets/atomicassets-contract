@@ -201,7 +201,6 @@ namespace atomicassets {
         uint64_t                 offer_counter     = 1;
         vector <FORMAT>          collection_format = {};
         vector <extended_symbol> supported_tokens  = {};
-        name                     rental_market     = name("atomicmarket");
     };
     typedef singleton <name("config"), config_s>               config_t;
 

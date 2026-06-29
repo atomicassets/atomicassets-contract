@@ -38,12 +38,6 @@ public:
         name rental_market
     );
 
-    ACTION pretitle(
-        name title_owner,
-        name market,
-        uint64_t asset_id
-    );
-
     ACTION leasestart(
         name market,
         name title_owner,
@@ -57,10 +51,6 @@ public:
         name market,
         uint64_t asset_id,
         uint32_t rental_end
-    );
-
-    ACTION delpretitle(
-        uint64_t asset_id
     );
 
     ACTION reclaim(
@@ -470,19 +460,15 @@ private:
     typedef multi_index <name("assets"), assets_s> assets_t;
 
 
-    // Non-custodial rental "title" / lock record. The existence of a row for an
-    // asset_id means the asset is LOCKED (no transfer/burn/offer-out/sale). Two
-    // states:
-    //   pretitle sentinel: renter == name(""), rental_end == 0 — the lister has
-    //       pre-locked the asset and consented to `market`; owner is still the
-    //       lister.
-    //   active lease:      renter != name(""), rental_end > 0 — the renter is the
-    //       real AtomicAssets owner; title_owner holds the reclaim right.
+    // Non-custodial rental "title" / lock record. A row exists for an asset_id iff
+    // it is actively leased: the renter is the real AtomicAssets owner, the asset
+    // is LOCKED (no transfer/burn/offer-out/sale), and title_owner holds the
+    // reclaim right until rental_end.
     TABLE leases_s {
         uint64_t         asset_id;
         name             title_owner;   // lister; reclaim returns the asset here
         name             renter;        // current AA owner during the lease
-        uint32_t         rental_end;    // sec_since_epoch; 0 for a pretitle sentinel
+        uint32_t         rental_end;    // sec_since_epoch the lease expires
         name             market;        // rental market that opened/manages the lease
 
         uint64_t primary_key()    const { return asset_id; };
@@ -531,14 +517,19 @@ private:
         uint64_t                 offer_counter     = 1;
         vector <FORMAT>          collection_format = {};
         vector <extended_symbol> supported_tokens  = {};
-        // The single account authorized to open/manage non-custodial rental
-        // leases (pretitle/leasestart/leaseextend). Defaults to the AtomicMarket
-        // contract; set to name("") via setrentmkt to disable leasing.
-        // NOTE: appending this field requires re-initialising the config
-        // singleton on an existing deployment (the stored blob predates it).
-        name                     rental_market     = name("atomicmarket");
     };
     typedef singleton <name("config"), config_s>               config_t;
+
+
+    // The single account authorized to open/manage non-custodial rental leases
+    // (leasestart/leaseextend). Kept in its OWN singleton (not appended to config)
+    // so deploying onto an existing contract needs no config migration: an absent
+    // row reads as the default (the AtomicMarket contract). setrentmkt overwrites
+    // it; name("") disables leasing.
+    TABLE rentalcfg_s {
+        name        rental_market = name("atomicmarket");
+    };
+    typedef singleton <name("rentalcfg"), rentalcfg_s>         rentalcfg_t;
 
 
     TABLE tokenconfigs_s {
@@ -559,6 +550,7 @@ private:
     offers_t            get_offers() {return offers_t(get_self(), get_self().value);}
     balances_t          get_balances() {return balances_t(get_self(), get_self().value);}
     config_t            get_config() {return config_t(get_self(), get_self().value);}
+    rentalcfg_t         get_rentalcfg() {return rentalcfg_t(get_self(), get_self().value);}
     tokenconfigs_t      get_tokenconfigs() {return tokenconfigs_t(get_self(), get_self().value);}
 
     schemas_t           get_schemas(name collection_name) {return schemas_t(get_self(), collection_name.value);}
@@ -614,9 +606,8 @@ private:
     // Reverts if the asset has a live lease/title record (i.e. is rental-locked).
     void check_not_leased(uint64_t asset_id);
 
-    // Erases any offers created by `account` whose sender_asset_ids reference
-    // `asset_id` (offers are AtomicAssets' approval mechanism).
-    void clear_offers_for_asset(name account, uint64_t asset_id);
+    // Asserts `market` is the configured rental market and requires its auth.
+    void check_rental_market(name market);
 
     void notify_collection_accounts(
         name collection_name
