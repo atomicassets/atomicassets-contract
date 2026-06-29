@@ -180,6 +180,21 @@ describe("non-custodial rental primitives", () => {
         expect(leases()[0].rental_end).toBe(newEnd);
     });
 
+    test("leaseextend cannot revive an expired lease (no racing the reclaim)", async () => {
+        await mint();
+        await leaseFor(ONE_HOUR);
+
+        // jump past expiry, then the market tries to push rental_end out
+        blockchain.addTime(TimePoint.fromMilliseconds((ONE_HOUR + 1) * 1000));
+        await expect(atomicassets.actions.leaseextend([
+            market.name.toString(), ASSET1, nowSec() + ONE_HOUR
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("already expired");
+
+        // reclaim is still available and returns the asset to the lister
+        await atomicassets.actions.reclaim([ASSET1]).send(`${third.name.toString()}@active`);
+        expect(assetsOf(lister).map((a) => a.asset_id)).toContain(ASSET1);
+    });
+
     // -------------------------------------------------------------- lock guards
 
     test("a leased asset cannot be transferred by the renter (its owner)", async () => {

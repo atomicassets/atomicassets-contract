@@ -180,6 +180,14 @@ ACTION atomicassets::leaseextend(
 
     leases_t leases = get_leases();
     auto lease_itr = leases.require_find(asset_id, "Asset is not leased");
+
+    // An expired lease can only be reclaimed, never extended. Otherwise the
+    // configured market could race the permissionless reclaim after expiry and
+    // push rental_end into the future, indefinitely blocking the guaranteed
+    // revert to the title_owner.
+    uint32_t now = eosio::current_time_point().sec_since_epoch();
+    check(now < lease_itr->rental_end, "Lease has already expired; it must be reclaimed, not extended");
+
     check(rental_end > lease_itr->rental_end, "rental_end must be later than the current end");
 
     name title_owner = lease_itr->title_owner;
