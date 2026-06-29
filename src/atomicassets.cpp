@@ -107,17 +107,16 @@ ACTION atomicassets::setrentmkt(name rental_market) {
 *  unlocked window (the lease row is written before the ownership flip). The
 *  configured rental market is trusted to have verified the lister's consent (on
 *  AtomicMarket the lister's announcerent carries that authorization).
-*  @required_auth market (must be the configured rental_market)
+*  @required_auth the configured rental market
 */
 ACTION atomicassets::leasestart(
-    name market,
     name title_owner,
     name renter,
     uint64_t asset_id,
     uint32_t rental_end,
     string memo
 ) {
-    check_rental_market(market);
+    name market = check_rental_market();
 
     check(is_account(renter), "renter account does not exist");
     check(renter != title_owner, "renter and title_owner cannot be the same");
@@ -149,7 +148,6 @@ ACTION atomicassets::leasestart(
         _lease.renter       = renter;
         _lease.rental_start = now;
         _lease.rental_end   = rental_end;
-        _lease.market       = market;
     });
 
     // Flip ownership lister -> renter under the contract's own authority. The
@@ -163,21 +161,20 @@ ACTION atomicassets::leasestart(
         permission_level{get_self(), name("active")},
         get_self(),
         name("loglock"),
-        make_tuple(collection_name, asset_id, title_owner, renter, rental_end, market)
+        make_tuple(collection_name, asset_id, title_owner, renter, rental_end)
     ).send();
 }
 
 
 /**
 *  Extends an active lease's end time. Does not change ownership.
-*  @required_auth market (must be the configured rental_market)
+*  @required_auth the configured rental market
 */
 ACTION atomicassets::leaseextend(
-    name market,
     uint64_t asset_id,
     uint32_t rental_end
 ) {
-    check_rental_market(market);
+    name market = check_rental_market();
 
     leases_t leases = get_leases();
     auto lease_itr = leases.require_find(asset_id, "Asset is not leased");
@@ -206,7 +203,7 @@ ACTION atomicassets::leaseextend(
         permission_level{get_self(), name("active")},
         get_self(),
         name("loglock"),
-        make_tuple(collection_name, asset_id, title_owner, renter, rental_end, market)
+        make_tuple(collection_name, asset_id, title_owner, renter, rental_end)
     ).send();
 }
 
@@ -1633,8 +1630,7 @@ ACTION atomicassets::loglock(
     uint64_t asset_id,
     name title_owner,
     name renter,
-    uint32_t rental_end,
-    name market
+    uint32_t rental_end
 ) {
     require_auth(get_self());
 
@@ -1982,14 +1978,14 @@ void atomicassets::check_not_leased(uint64_t asset_id) {
 
 
 /**
-*  Asserts that `market` is the configured rental market and is authorized. The
-*  configured account is the single trusted opener/manager of leases.
+*  Requires the authorization of the configured rental market (the single account
+*  trusted to open and manage leases) and returns it. name("") disables leasing.
 */
-void atomicassets::check_rental_market(name market) {
+name atomicassets::check_rental_market() {
     name configured = get_rentalcfg().get_or_default(rentalcfg_s{}).rental_market;
-    check(configured != name("") && market == configured,
-        "market is not the configured rental market");
-    require_auth(market);
+    check(configured != name(""), "Leasing is disabled (no rental market configured)");
+    require_auth(configured);
+    return configured;
 }
 
 

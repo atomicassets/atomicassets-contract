@@ -39,7 +39,6 @@ public:
     );
 
     ACTION leasestart(
-        name market,
         name title_owner,
         name renter,
         uint64_t asset_id,
@@ -48,7 +47,6 @@ public:
     );
 
     ACTION leaseextend(
-        name market,
         uint64_t asset_id,
         uint32_t rental_end
     );
@@ -280,8 +278,7 @@ public:
         uint64_t asset_id,
         name title_owner,
         name renter,
-        uint32_t rental_end,
-        name market
+        uint32_t rental_end
     );
 
     ACTION logreclaim(
@@ -470,7 +467,6 @@ private:
         name             renter;        // current AA owner during the lease
         uint32_t         rental_start;  // sec_since_epoch the lease was first opened (fixed across extensions)
         uint32_t         rental_end;    // sec_since_epoch the lease expires
-        name             market;        // rental market that opened/manages the lease
 
         uint64_t primary_key()    const { return asset_id; };
         uint64_t by_title_owner() const { return title_owner.value; };
@@ -607,8 +603,9 @@ private:
     // Reverts if the asset has a live lease/title record (i.e. is rental-locked).
     void check_not_leased(uint64_t asset_id);
 
-    // Asserts `market` is the configured rental market and requires its auth.
-    void check_rental_market(name market);
+    // Requires the authorization of the configured rental market (the single
+    // account allowed to open/manage leases) and returns it.
+    name check_rental_market();
 
     void notify_collection_accounts(
         name collection_name

@@ -113,7 +113,6 @@ describe("non-custodial rental primitives", () => {
     async function leaseFor(seconds = ONE_HOUR) {
         const rentalEnd = nowSec() + seconds;
         await atomicassets.actions.leasestart([
-            market.name.toString(),
             lister.name.toString(),
             renter.name.toString(),
             ASSET1,
@@ -139,8 +138,7 @@ describe("non-custodial rental primitives", () => {
             title_owner: lister.name.toString(),
             renter: renter.name.toString(),
             rental_start: rentalEnd - ONE_HOUR,
-            rental_end: rentalEnd,
-            market: market.name.toString()
+            rental_end: rentalEnd
         }]);
     });
 
@@ -155,7 +153,7 @@ describe("non-custodial rental primitives", () => {
         await leaseFor();
         const rentalEnd = nowSec() + ONE_HOUR;
         await expect(atomicassets.actions.leasestart([
-            market.name.toString(), lister.name.toString(), renter.name.toString(),
+            lister.name.toString(), renter.name.toString(),
             ASSET1, rentalEnd, "second lease"
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("already leased");
     });
@@ -164,7 +162,7 @@ describe("non-custodial rental primitives", () => {
         await mint(2); // non-transferable template
         const rentalEnd = nowSec() + ONE_HOUR;
         await expect(atomicassets.actions.leasestart([
-            market.name.toString(), lister.name.toString(), renter.name.toString(),
+            lister.name.toString(), renter.name.toString(),
             ASSET1, rentalEnd, "lease"
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("not transferable");
     });
@@ -174,7 +172,7 @@ describe("non-custodial rental primitives", () => {
         await leaseFor();
         const newEnd = nowSec() + ONE_HOUR * 5;
         await atomicassets.actions.leaseextend([
-            market.name.toString(), ASSET1, newEnd
+            ASSET1, newEnd
         ]).send(`${market.name.toString()}@active`);
 
         expect(assetsOf(renter)).toHaveLength(1); // still the renter's
@@ -188,7 +186,7 @@ describe("non-custodial rental primitives", () => {
         // jump past expiry, then the market tries to push rental_end out
         blockchain.addTime(TimePoint.fromMilliseconds((ONE_HOUR + 1) * 1000));
         await expect(atomicassets.actions.leaseextend([
-            market.name.toString(), ASSET1, nowSec() + ONE_HOUR
+            ASSET1, nowSec() + ONE_HOUR
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("already expired");
 
         // reclaim is still available and returns the asset to the lister
@@ -245,13 +243,15 @@ describe("non-custodial rental primitives", () => {
 
     // ----------------------------------------------------------------- authority
 
-    test("throw when an unconfigured account tries to open a lease", async () => {
+    test("throw when an account other than the configured market opens a lease", async () => {
         await mint();
         const rentalEnd = nowSec() + ONE_HOUR;
+        // signed by `third`, not the configured market (atomicmarket), so the
+        // required authority of the configured market is missing
         await expect(atomicassets.actions.leasestart([
-            third.name.toString(), lister.name.toString(), renter.name.toString(),
+            lister.name.toString(), renter.name.toString(),
             ASSET1, rentalEnd, "lease"
-        ]).send(`${third.name.toString()}@active`)).rejects.toThrow("not the configured rental market");
+        ]).send(`${third.name.toString()}@active`)).rejects.toThrow("missing required authority");
     });
 
     test("setrentmkt requires contract authority and reconfigures the market", async () => {
@@ -268,12 +268,12 @@ describe("non-custodial rental primitives", () => {
 
         const rentalEnd = nowSec() + ONE_HOUR;
         await expect(atomicassets.actions.leasestart([
-            market.name.toString(), lister.name.toString(), renter.name.toString(),
+            lister.name.toString(), renter.name.toString(),
             ASSET1, rentalEnd, "lease"
-        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("not the configured rental market");
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("missing required authority");
 
         await expect(atomicassets.actions.leasestart([
-            third.name.toString(), lister.name.toString(), renter.name.toString(),
+            lister.name.toString(), renter.name.toString(),
             ASSET1, rentalEnd, "lease"
         ]).send(`${third.name.toString()}@active`)).resolves.not.toThrow();
         expect(assetsOf(renter)).toHaveLength(1);
