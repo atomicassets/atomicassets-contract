@@ -138,6 +138,7 @@ describe("non-custodial rental primitives", () => {
             asset_id: ASSET1,
             title_owner: lister.name.toString(),
             renter: renter.name.toString(),
+            rental_start: rentalEnd - ONE_HOUR,
             rental_end: rentalEnd,
             market: market.name.toString()
         }]);

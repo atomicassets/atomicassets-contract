@@ -468,6 +468,7 @@ private:
         uint64_t         asset_id;
         name             title_owner;   // lister; reclaim returns the asset here
         name             renter;        // current AA owner during the lease
+        uint32_t         rental_start;  // sec_since_epoch the lease was first opened (fixed across extensions)
         uint32_t         rental_end;    // sec_since_epoch the lease expires
         name             market;        // rental market that opened/manages the lease
 

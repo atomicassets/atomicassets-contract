@@ -144,11 +144,12 @@ ACTION atomicassets::leasestart(
     // Write the lock row FIRST so there is no instant where the asset is
     // renter-owned but unlocked.
     leases.emplace(market, [&](auto &_lease) {
-        _lease.asset_id    = asset_id;
-        _lease.title_owner = title_owner;
-        _lease.renter      = renter;
-        _lease.rental_end  = rental_end;
-        _lease.market      = market;
+        _lease.asset_id     = asset_id;
+        _lease.title_owner  = title_owner;
+        _lease.renter       = renter;
+        _lease.rental_start = now;
+        _lease.rental_end   = rental_end;
+        _lease.market       = market;
     });
 
     // Flip ownership lister -> renter under the contract's own authority. The
