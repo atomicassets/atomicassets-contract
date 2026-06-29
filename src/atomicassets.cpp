@@ -1922,7 +1922,10 @@ void atomicassets::internal_transfer(
         if (no_previous_scope) {
             //A dummy asset is emplaced, which makes the scope_payer pay for the ram of the scope
             //This asset is later deleted again.
-            //This action will therefore fail is the scope_payer didn't authorize the action
+            //This requires scope_payer to have authorized the action - EXCEPT when scope_payer is
+            //the contract itself (get_self()), which can always bill its own RAM. The privileged
+            //rental paths (leasestart, permissionless reclaim) rely on that: they pass get_self()
+            //so no title_owner/renter signature is needed to create the destination scope.
             to_assets.emplace(scope_payer, [&](auto &_asset) {
                 _asset.asset_id = ULLONG_MAX;
                 _asset.collection_name = name("");
