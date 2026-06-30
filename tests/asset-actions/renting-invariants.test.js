@@ -14,7 +14,7 @@ const { TimePoint } = require("@wharfkit/antelope");
 describe("non-custodial rental primitives", () => {
     let blockchain;
     let atomicassets;
-    let market;   // configured rental market (rentalcfg default = "atomicmarket")
+    let market;   // the rental market we authorize via setrentmkt (leasing is opt-in)
     let lister;   // title_owner / lessor
     let renter;   // becomes the AA owner during the lease
     let third;    // unrelated third party / random reclaim caller
@@ -40,8 +40,8 @@ describe("non-custodial rental primitives", () => {
     beforeAll(async () => {
         blockchain = new Blockchain();
         atomicassets = blockchain.createContract('atomicassets', './build/atomicassets');
-        // The rentalcfg singleton defaults to "atomicmarket", so create that
-        // account as the authorized market (no setrentmkt needed).
+        // Leasing is opt-in (rentalcfg defaults to disabled); this is the market account we
+        // authorize via setrentmkt in beforeEach.
         market = blockchain.createAccount('atomicmarket');
         lister = blockchain.createAccount('lister');
         renter = blockchain.createAccount('renter');
