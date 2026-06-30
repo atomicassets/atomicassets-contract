@@ -13,11 +13,8 @@ using namespace atomicdata;
 static constexpr double MAX_MARKET_FEE = 0.15;
 static constexpr uint32_t AUTHOR_SWAP_TIME_DELTA = 60 * 60 * 24 * 7; // 1 week, valid for 1 week
 
-// Defense-in-depth backstop on the non-custodial rental primitive: the protocol caps any single
-// lease (and any extension, measured from the lease's fixed rental_start) at this duration so a
-// compromised or buggy configured rental_market cannot mint a near-permanent (~year 2106) lock on
-// an asset. The product-level limit lives in the rental market (AtomicMarket enforces the same
-// 28 days); this is the hard protocol ceiling regardless of which market is configured.
+// Protocol ceiling on a lease (and its total extended window, from the fixed rental_start), so a
+// compromised or buggy rental_market can't mint a near-permanent lock. AtomicMarket caps to the same.
 static constexpr uint32_t MAX_LEASE_SECONDS = 60 * 60 * 24 * 28; // 28 days
 
 static constexpr char COLLECTION_NOT_FOUND[] = "No collection with this name exists";
@@ -472,6 +469,7 @@ private:
         uint64_t         asset_id;
         name             title_owner;   // lister; reclaim returns the asset here
         name             renter;        // current AA owner during the lease
+        name             collection_name;
         uint32_t         rental_start;  // sec_since_epoch the lease was first opened (fixed across extensions)
         uint32_t         rental_end;    // sec_since_epoch the lease expires
 
@@ -525,13 +523,12 @@ private:
     typedef singleton <name("config"), config_s>               config_t;
 
 
-    // The single account authorized to open/manage non-custodial rental leases
-    // (leasestart/leaseextend). Kept in its OWN singleton (not appended to config)
-    // so deploying onto an existing contract needs no config migration: an absent
-    // row reads as the default (the AtomicMarket contract). setrentmkt overwrites
-    // it; name("") disables leasing.
+    // The single account authorized to open/manage leases (leasestart/leaseextend), in its own
+    // singleton so it needs no config migration. Leasing is opt-in: name("") (the default, and an
+    // absent row) means disabled, so a fresh deploy is off until setrentmkt("atomicmarket"); set it
+    // back to name("") to kill-switch all leasing. Not hardcoded - the market account differs per chain.
     TABLE rentalcfg_s {
-        name        rental_market = name("atomicmarket");
+        name        rental_market = name("");
     };
     typedef singleton <name("rentalcfg"), rentalcfg_s>         rentalcfg_t;
 
@@ -613,6 +610,9 @@ private:
     // Requires the authorization of the configured rental market (the single
     // account allowed to open/manage leases) and returns it.
     name check_rental_market();
+
+    // Emits the loglock action (shared by leasestart and leaseextend).
+    void send_loglock(name collection_name, uint64_t asset_id, name title_owner, name renter, uint32_t rental_end);
 
     void notify_collection_accounts(
         name collection_name

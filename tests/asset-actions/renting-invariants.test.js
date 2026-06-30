@@ -54,6 +54,13 @@ describe("non-custodial rental primitives", () => {
         blockchain.resetTables();
         await atomicassets.actions.init([]).send(`${atomicassets.name.toString()}@active`);
 
+        // Leasing is opt-in (rentalcfg defaults to name("") = disabled). Enable it for
+        // the rental tests by authorizing the market; the "default disabled" test below
+        // covers the un-configured state explicitly.
+        await atomicassets.actions.setrentmkt([
+            market.name.toString()
+        ]).send(`${atomicassets.name.toString()}@active`);
+
         await atomicassets.actions.createcol([
             lister.name.toString(),
             "testcollect1",
@@ -141,13 +148,27 @@ describe("non-custodial rental primitives", () => {
             asset_id: ASSET1,
             title_owner: lister.name.toString(),
             renter: renter.name.toString(),
+            collection_name: "testcollect1",
             rental_start: rentalEnd - ONE_HOUR,
             rental_end: rentalEnd
         }]);
     });
 
-    test("leasing works out of the box on the default rentalcfg (no setrentmkt needed)", async () => {
+    test("leasing is DISABLED by default; enabling requires setrentmkt", async () => {
         await mint();
+        // reset rentalcfg to its on-deploy default (the unconfigured/disabled state)
+        await atomicassets.actions.setrentmkt([""]).send(`${atomicassets.name.toString()}@active`);
+
+        const rentalEnd = nowSec() + ONE_HOUR;
+        await expect(atomicassets.actions.leasestart([
+            lister.name.toString(), renter.name.toString(),
+            ASSET1, rentalEnd, "lease"
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("Leasing is disabled");
+
+        // re-enable and confirm leasing works
+        await atomicassets.actions.setrentmkt([
+            market.name.toString()
+        ]).send(`${atomicassets.name.toString()}@active`);
         await expect(leaseFor()).resolves.toBeDefined();
         expect(assetsOf(renter)).toHaveLength(1);
     });

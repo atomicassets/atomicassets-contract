@@ -152,6 +152,7 @@ namespace atomicassets {
         uint64_t         asset_id;
         name             title_owner;
         name             renter;
+        name             collection_name;
         uint32_t         rental_start;
         uint32_t         rental_end;
 
