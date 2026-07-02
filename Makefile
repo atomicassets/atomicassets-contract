@@ -2,6 +2,7 @@ build:
 	mkdir -p build
 	cdt-cpp -abigen -contract=atomicassets -I./include src/atomicassets.cpp -o build/atomicassets.wasm
 	$(MAKE) build-test-consumer
+	$(MAKE) build-evil-renter
 
 # Test-only fixture: a minimal EXTERNAL contract that reads atomicassets tables
 # through include/atomicassets-interface.hpp. Catches header regressions the
@@ -11,6 +12,14 @@ build:
 build-test-consumer:
 	mkdir -p build
 	cdt-cpp -abigen -contract=ifaceconsumr -I./include tests/fixtures/interface-consumer/interface-consumer.cpp -o build/interface-consumer.wasm
+
+# Test-only adversary: a renter/collection contract that throws on the
+# atomicassets::logreclaim notification. Proves the permissionless reclaim can no
+# longer be vetoed by a hostile notification handler (the asset-trap fix).
+# Consumed by tests/asset-actions/renting-invariants.test.js; NOT a release artifact.
+build-evil-renter:
+	mkdir -p build
+	cdt-cpp -abigen -contract=evilrenter -I./include tests/fixtures/evil-renter/evil-renter.cpp -o build/evil-renter.wasm
 
 # Release-only ABI normalization. CDT 4.1 changed two -abigen spellings
 # (pair fields first/second; vector<uint8_t> as `bytes`) that break existing
@@ -33,6 +42,6 @@ export-memory:
 	wat2wasm -o build/atomicassets.wasm atomicassets.wat
 	rm atomicassets.wat
 
-.PHONY: build build-test-consumer patch-abi release export-memory clean
+.PHONY: build build-test-consumer build-evil-renter patch-abi release export-memory clean
 clean:
 	-rm -rf build

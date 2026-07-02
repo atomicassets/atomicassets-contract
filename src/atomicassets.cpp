@@ -86,106 +86,174 @@ ACTION atomicassets::transfer(
 }
 
 /**
-*  Moves one or more assets to another account
-*  @required_auth of the true owner of the asset
-*  Cannot have notifications for the from & to, exploitable
+*  Sets the single account authorized to open/manage non-custodial rental leases
+*  (leasestart / leaseextend). name("") disables leasing entirely. Stored in its
+*  own `rentalcfg` singleton so it needs no migration of the existing config row.
+*  @required_auth The contract itself
 */
-ACTION atomicassets::move(
-    name owner,
-    name from,
-    name to,
-    vector <uint64_t> asset_ids,
+ACTION atomicassets::setrentmkt(name rental_market) {
+    require_auth(get_self());
+
+    check(rental_market == name("") || is_account(rental_market),
+        "rental_market account does not exist");
+
+    rentalcfg_t rentalcfg = get_rentalcfg();
+    rentalcfg_s cfg = rentalcfg.get_or_default(rentalcfg_s{});
+    cfg.rental_market = rental_market;
+    rentalcfg.set(cfg, get_self());
+}
+
+
+/**
+*  Sets the lease-duration cap, bounded above by the MAX_LEASE_SECONDS protocol
+*  ceiling. Disabling leasing entirely is setrentmkt's job, so zero is rejected.
+*  @required_auth The contract itself
+*/
+ACTION atomicassets::setleasecap(uint32_t max_lease_seconds) {
+    require_auth(get_self());
+
+    check(max_lease_seconds > 0, "max_lease_seconds must be positive");
+    check(max_lease_seconds <= MAX_LEASE_SECONDS,
+        "max_lease_seconds exceeds the protocol ceiling");
+
+    rentalcfg_t rentalcfg = get_rentalcfg();
+    rentalcfg_s cfg = rentalcfg.get_or_default(rentalcfg_s{});
+    cfg.max_lease_seconds = max_lease_seconds;
+    rentalcfg.set(cfg, get_self());
+}
+
+
+/**
+*  Opens a non-custodial lease: `renter` becomes the real owner, the lister's reclaim right is
+*  parked in the lease row, and the asset is locked. The configured market is trusted to have
+*  verified the lister's consent (AtomicMarket's announcerent carries it).
+*  @required_auth the configured rental market
+*/
+ACTION atomicassets::leasestart(
+    name title_owner,
+    name renter,
+    uint64_t asset_id,
+    uint32_t rental_end,
+    uint64_t rental_id,
     string memo
 ) {
-    require_auth(owner);
-    require_recipient(owner);
+    name market = check_rental_market();
 
-    check(is_account(from), "from account does not exist");
-    check(is_account(to), "to account does not exist");
+    check(is_account(renter), "renter account does not exist");
+    check(renter != title_owner, "renter and title_owner cannot be the same");
 
-    check(from != to, "from & to fields cannot be the same");
+    uint32_t now = eosio::current_time_point().sec_since_epoch();
+    check(rental_end > now, "rental_end must be in the future");
 
-    check(asset_ids.size() != 0, "asset_ids needs to contain at least one id");
-    check(memo.length() <= 256, "A move memo can only be 256 characters max");
+    // Protocol backstop against a compromised/buggy market minting a near-permanent lock.
+    check(rental_end - now <= get_lease_cap(), "rental_end exceeds the maximum lease duration");
 
-    vector <uint64_t> asset_ids_copy = asset_ids;
-    std::sort(asset_ids_copy.begin(), asset_ids_copy.end());
-    check(std::adjacent_find(asset_ids_copy.begin(), asset_ids_copy.end()) == asset_ids_copy.end(),
-        "Can't move the same asset multiple times");
+    leases_t leases = get_leases();
+    check(leases.find(asset_id) == leases.end(), "Asset is already leased");
 
-    assets_t owner_assets = get_assets(owner);
-    holders_t holders = get_holders();
+    assets_t owner_assets = get_assets(title_owner);
+    auto asset_itr = owner_assets.require_find(asset_id,
+        "title_owner does not own this asset");
+    name collection_name = asset_itr->collection_name;
 
-    map <name, vector <uint64_t>> collection_to_assets_moved = {};
-
-    for (uint64_t & asset_id : asset_ids) {
-        auto asset_itr = owner_assets.find(asset_id);
-        if (asset_itr == owner_assets.end()){
-            check(false,
-                ("Owner doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
-        }
-            
-
-        //Existence doesn't have to be checked because this always has to exist
-        if (asset_itr->template_id >= 0) {
-            templates_t collection_templates = get_templates(asset_itr->collection_name);
-
-            auto template_itr = collection_templates.find(asset_itr->template_id);
-            if (!template_itr->transferable){
-                check(false,
-                    ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
-            }
-        }
-
-        auto holders_itr = holders.find(asset_id);
-        if (holders_itr == holders.end()){
-            if (from != owner){
-                check(false, 
-                    ("Only the owner can move this asset (ID: " + to_string(asset_id) + ")").c_str());
-            }
-                
-            // Emplaces new holder
-            holders.emplace(owner, [&](auto &_holders_row){
-                _holders_row.asset_id = asset_id;
-                _holders_row.holder = to;
-                _holders_row.owner = owner;
-            });
-        }
-
-        if (holders_itr != holders.end()){
-            if (holders_itr->holder != from){
-                check(false, 
-                    ("At least one asset invalidates the 'from:holder' constraint (ID: " + to_string(asset_id) + ")").c_str());
-            }
-
-            // Deletes row if returning to owner
-            if (to == owner){
-                holders.erase(holders_itr);
-            } else { // Modifies row to move holdership to the new "to" wallet
-                holders.modify(holders_itr, owner, [&](auto &_holders_row){
-                    _holders_row.holder = to;
-                });
-            }
-        }
-
-        //This is needed for sending notifications later
-        if (collection_to_assets_moved.find(asset_itr->collection_name) !=
-            collection_to_assets_moved.end()) {
-            collection_to_assets_moved[asset_itr->collection_name].push_back(asset_id);
-        } else {
-            collection_to_assets_moved[asset_itr->collection_name] = {asset_id};
-        }
+    // internal_transfer re-checks this; fail early with a clear message.
+    if (asset_itr->template_id >= 0) {
+        templates_t collection_templates = get_templates(collection_name);
+        auto template_itr = collection_templates.find(asset_itr->template_id);
+        check(template_itr->transferable, "The asset is not transferable");
     }
 
-    // Sending notifications
-    for (const auto&[collection, assets_moved] : collection_to_assets_moved) {
-        action(
-            permission_level{get_self(), name("active")},
-            get_self(),
-            name("logmove"),
-            make_tuple(collection, owner, from, to, assets_moved, memo)
-        ).send();
-    }
+    // Write the lock row before the ownership flip (no renter-owned-but-unlocked instant).
+    leases.emplace(market, [&](auto &_lease) {
+        _lease.asset_id        = asset_id;
+        _lease.title_owner     = title_owner;
+        _lease.renter          = renter;
+        _lease.collection_name = collection_name;
+        _lease.rental_start    = now;
+        _lease.rental_end      = rental_end;
+        _lease.rental_id       = rental_id;
+    });
+
+    // Flip lister -> renter under the contract's own authority: the lock is in force, so this is
+    // the privileged enforce_lock=false path, and the contract pays any transient scope RAM.
+    internal_transfer(title_owner, renter, vector<uint64_t>{asset_id}, memo, get_self(), false);
+
+    send_loglock(collection_name, asset_id, title_owner, renter, now, rental_end, rental_id);
+}
+
+
+/**
+*  Extends an active lease's end time. Does not change ownership.
+*  @required_auth the configured rental market
+*/
+ACTION atomicassets::leaseextend(
+    uint64_t asset_id,
+    uint32_t rental_end
+) {
+    name market = check_rental_market();
+
+    leases_t leases = get_leases();
+    auto lease_itr = leases.require_find(asset_id, "Asset is not leased");
+
+    // Expired leases can only be reclaimed, not extended - else the market could race the
+    // permissionless reclaim and push rental_end out, blocking the guaranteed revert.
+    uint32_t now = eosio::current_time_point().sec_since_epoch();
+    check(now < lease_itr->rental_end, "Lease has already expired");
+
+    check(rental_end > lease_itr->rental_end, "rental_end must be later than the current end");
+
+    // Cap the total window from the fixed rental_start, so repeated extensions can't roll past the
+    // max. Deliberate asymmetry: a reclaim + re-lease gets a fresh window, because it necessarily
+    // transits the reclaimable state the cap exists to guarantee.
+    check(rental_end - lease_itr->rental_start <= get_lease_cap(),
+        "rental_end exceeds the maximum lease duration");
+
+    name title_owner = lease_itr->title_owner;
+    name renter = lease_itr->renter;
+    name collection_name = lease_itr->collection_name;
+    uint32_t rental_start = lease_itr->rental_start;
+    uint64_t rental_id = lease_itr->rental_id;
+
+    leases.modify(lease_itr, market, [&](auto &_lease) {
+        _lease.rental_end = rental_end;
+    });
+
+    send_loglock(collection_name, asset_id, title_owner, renter, rental_start, rental_end, rental_id);
+}
+
+
+/**
+*  Permissionless reclaim of an expired lease: returns the asset to the title_owner and clears the
+*  lock, under the contract's own authority (no renter signature). The guaranteed revert the model
+*  rests on.
+*  @required_auth none (permissionless)
+*/
+ACTION atomicassets::reclaim(
+    uint64_t asset_id
+) {
+    leases_t leases = get_leases();
+    auto lease_itr = leases.require_find(asset_id, "Asset is not leased");
+
+    uint32_t now = eosio::current_time_point().sec_since_epoch();
+    check(now >= lease_itr->rental_end, "Lease has not expired yet");
+
+    name title_owner = lease_itr->title_owner;
+    name renter = lease_itr->renter;
+    name collection_name = lease_itr->collection_name;
+    uint64_t rental_id = lease_itr->rental_id;
+
+    // Erase the lock, then move the asset back under the contract's own authority (enforce_lock=false;
+    // contract pays transient scope RAM). See logreclaim for why this path notifies no account that
+    // could abort it.
+    leases.erase(lease_itr);
+    internal_transfer(renter, title_owner, vector<uint64_t>{asset_id}, "lease reclaim", get_self(), false);
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("logreclaim"),
+        make_tuple(collection_name, asset_id, title_owner, renter, rental_id)
+    ).send();
 }
 
 /**
@@ -224,9 +292,8 @@ ACTION atomicassets::createcol(
 
     check(allow_notify || notify_accounts.size() == 0, "Can't add notify_accounts if allow_notify is false");
 
-    // createcol writes both vectors verbatim; cap them at 24 like addcolauth/addnotifyacc, and
-    // before the loops below so an oversized vector fails fast. The cap keeps partial_read_collection
-    // within its read budget.
+    // Cap both vectors at 24 (like addcolauth/addnotifyacc), before the loops, so an oversized
+    // vector fails fast and stays within partial_read_collection's read budget.
     check(authorized_accounts.size() <= 24, "Can only have up to 24 authorized accounts");
     check(notify_accounts.size() <= 24, "Can only have up to 24 notify accounts");
 
@@ -1202,6 +1269,10 @@ ACTION atomicassets::burnasset(
 ) {
     require_auth(asset_owner);
 
+    // A rental-locked asset cannot be burned (that would destroy the lister's
+    // reclaim right).
+    check_not_leased(asset_id);
+
     assets_t owner_assets = get_assets(asset_owner);
     auto asset_itr = owner_assets.require_find(asset_id,
         "No asset with this id exists for this owner");
@@ -1212,14 +1283,6 @@ ACTION atomicassets::burnasset(
         auto template_itr = collection_templates.find(asset_itr->template_id);
         check(template_itr->burnable, "The asset is not burnable");
     };
-
-    holders_t holders = get_holders();
-
-    // Checks to see if the asset has been rented out & erases the "holdership"
-    auto holders_itr = holders.find(asset_id);
-    if (holders_itr != holders.end()){
-        holders.erase(holders_itr);
-    }    
 
     if (asset_itr->backed_tokens.size() != 0) {
         auto balances = get_balances();
@@ -1327,9 +1390,13 @@ ACTION atomicassets::createoffer(
     for (uint64_t asset_id : sender_asset_ids) {
         auto asset_itr = sender_assets.find(asset_id);
         if (asset_itr == sender_assets.end()){
-            check(false, 
+            check(false,
                 ("Offer sender doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
         }
+
+        // A renter is the real owner of a leased asset, so get_assets(sender)
+        // exposes it here. Block offering a rental-locked asset out.
+        check_not_leased(asset_id);
 
         if (asset_itr->template_id >= 0) {
             templates_t collection_templates = get_templates(asset_itr->collection_name);
@@ -1565,16 +1632,36 @@ ACTION atomicassets::logtransfer(
     notify_collection_accounts(collection_name);
 }
 
-ACTION atomicassets::logmove(
+ACTION atomicassets::loglock(
     name collection_name,
-    name owner,
-    name from,
-    name to,
-    vector <uint64_t> asset_ids,
-    string memo
+    uint64_t asset_id,
+    name title_owner,
+    name renter,
+    uint32_t rental_start,
+    uint32_t rental_end,
+    uint64_t rental_id
 ) {
     require_auth(get_self());
 
+    require_recipient(title_owner);
+    require_recipient(renter);
+    notify_collection_accounts(collection_name);
+}
+
+ACTION atomicassets::logreclaim(
+    name collection_name,
+    uint64_t asset_id,
+    name title_owner,
+    name renter,
+    uint64_t rental_id
+) {
+    require_auth(get_self());
+
+    // Notify the collection (mirrors loglock) so it can react to its assets returning. This trusts
+    // collections not to grief their own: a throwing notify-account CAN abort the reclaim - accepted,
+    // same as collections gating transfers. But NOT the renter or title_owner: the renter is an
+    // arbitrary account that profits from keeping the asset, so notifying it would let it veto the
+    // guaranteed revert (throw in the handler -> reclaim aborts -> asset trapped).
     notify_collection_accounts(collection_name);
 }
 
@@ -1792,7 +1879,8 @@ void atomicassets::internal_transfer(
     name to,
     vector <uint64_t> asset_ids,
     string memo,
-    name scope_payer
+    name scope_payer,
+    bool enforce_lock
 ) {
     check(is_account(to), "to account does not exist");
 
@@ -1809,16 +1897,19 @@ void atomicassets::internal_transfer(
 
     assets_t from_assets = get_assets(from);
     assets_t to_assets = get_assets(to);
-    holders_t holders = get_holders();
 
     map <name, vector <uint64_t>> collection_to_assets_transferred = {};
 
     for (uint64_t asset_id : asset_ids) {
         auto asset_itr = from_assets.find(asset_id);
         if (asset_itr == from_assets.end()){
-            check(false, 
+            check(false,
                 ("Sender doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
         }
+
+        // Rental lock: a leased asset can only be moved by the privileged
+        // lease-start / reclaim paths (which pass enforce_lock = false).
+        if (enforce_lock) check_not_leased(asset_id);
 
         //Existence doesn't have to be checked because this always has to exist
         if (asset_itr->template_id >= 0) {
@@ -1828,19 +1919,6 @@ void atomicassets::internal_transfer(
             if (!template_itr->transferable){
                 check(false, 
                     ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
-            }
-        }
-
-        auto holders_itr = holders.find(asset_id);
-        if (holders_itr != holders.end()){
-
-            // Deletes row if transfering to holder
-            if (to == holders_itr->holder){
-                holders.erase(holders_itr);
-            } else { // Modifies row to move ownership to the new "to" wallet
-                holders.modify(holders_itr, from, [&](auto &_holders_row){
-                    _holders_row.owner = to;
-                });
             }
         }
 
@@ -1855,9 +1933,9 @@ void atomicassets::internal_transfer(
         //to assets are empty => no scope has been created yet
         bool no_previous_scope = to_assets.begin() == to_assets.end();
         if (no_previous_scope) {
-            //A dummy asset is emplaced, which makes the scope_payer pay for the ram of the scope
-            //This asset is later deleted again.
-            //This action will therefore fail is the scope_payer didn't authorize the action
+            //A dummy asset is emplaced so scope_payer pays the new scope's RAM; it is deleted below.
+            //scope_payer must have authorized the action - except get_self(), which always bills its
+            //own RAM (the rental paths pass get_self(), so no renter/title_owner signature is needed).
             to_assets.emplace(scope_payer, [&](auto &_asset) {
                 _asset.asset_id = ULLONG_MAX;
                 _asset.collection_name = name("");
@@ -1898,6 +1976,57 @@ void atomicassets::internal_transfer(
         ).send();
     }
 }
+
+
+/**
+*  Reverts if the asset has a live lease/title record (i.e. is rental-locked).
+*  The lock is keyed purely on the existence of a leases row, so there is no
+*  post-expiry abscondment window.
+*/
+void atomicassets::check_not_leased(uint64_t asset_id) {
+    leases_t leases = get_leases();
+    check(leases.find(asset_id) == leases.end(),
+        ("Asset is leased and locked (ID: " + to_string(asset_id) + ")").c_str());
+}
+
+
+/**
+*  Requires the authorization of the configured rental market (the single account
+*  trusted to open and manage leases) and returns it. name("") disables leasing.
+*/
+name atomicassets::check_rental_market() {
+    name configured = get_rentalcfg().get_or_default(rentalcfg_s{}).rental_market;
+    check(configured != name(""), "Leasing is disabled (no rental market configured)");
+    require_auth(configured);
+    return configured;
+}
+
+
+void atomicassets::send_loglock(
+    name collection_name,
+    uint64_t asset_id,
+    name title_owner,
+    name renter,
+    uint32_t rental_start,
+    uint32_t rental_end,
+    uint64_t rental_id
+) {
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("loglock"),
+        make_tuple(collection_name, asset_id, title_owner, renter, rental_start, rental_end, rental_id)
+    ).send();
+}
+
+
+/**
+*  The governance-configured lease-duration cap (defaults to the MAX_LEASE_SECONDS ceiling).
+*/
+uint32_t atomicassets::get_lease_cap() {
+    return get_rentalcfg().get_or_default(rentalcfg_s{}).max_lease_seconds;
+}
+
 
 /**
 *  Decreases the balance of a specified account by a specified quantity
