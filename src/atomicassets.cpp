@@ -97,7 +97,29 @@ ACTION atomicassets::setrentmkt(name rental_market) {
     check(rental_market == name("") || is_account(rental_market),
         "rental_market account does not exist");
 
-    get_rentalcfg().set(rentalcfg_s{rental_market}, get_self());
+    rentalcfg_t rentalcfg = get_rentalcfg();
+    rentalcfg_s cfg = rentalcfg.get_or_default(rentalcfg_s{});
+    cfg.rental_market = rental_market;
+    rentalcfg.set(cfg, get_self());
+}
+
+
+/**
+*  Sets the lease-duration cap, bounded above by the MAX_LEASE_SECONDS protocol
+*  ceiling. Disabling leasing entirely is setrentmkt's job, so zero is rejected.
+*  @required_auth The contract itself
+*/
+ACTION atomicassets::setleasecap(uint32_t max_lease_seconds) {
+    require_auth(get_self());
+
+    check(max_lease_seconds > 0, "max_lease_seconds must be positive");
+    check(max_lease_seconds <= MAX_LEASE_SECONDS,
+        "max_lease_seconds exceeds the protocol ceiling");
+
+    rentalcfg_t rentalcfg = get_rentalcfg();
+    rentalcfg_s cfg = rentalcfg.get_or_default(rentalcfg_s{});
+    cfg.max_lease_seconds = max_lease_seconds;
+    rentalcfg.set(cfg, get_self());
 }
 
 
@@ -112,6 +134,7 @@ ACTION atomicassets::leasestart(
     name renter,
     uint64_t asset_id,
     uint32_t rental_end,
+    uint64_t rental_id,
     string memo
 ) {
     name market = check_rental_market();
@@ -123,7 +146,7 @@ ACTION atomicassets::leasestart(
     check(rental_end > now, "rental_end must be in the future");
 
     // Protocol backstop against a compromised/buggy market minting a near-permanent lock.
-    check(rental_end - now <= MAX_LEASE_SECONDS, "rental_end exceeds the maximum lease duration");
+    check(rental_end - now <= get_lease_cap(), "rental_end exceeds the maximum lease duration");
 
     leases_t leases = get_leases();
     check(leases.find(asset_id) == leases.end(), "Asset is already leased");
@@ -148,13 +171,14 @@ ACTION atomicassets::leasestart(
         _lease.collection_name = collection_name;
         _lease.rental_start    = now;
         _lease.rental_end      = rental_end;
+        _lease.rental_id       = rental_id;
     });
 
     // Flip lister -> renter under the contract's own authority: the lock is in force, so this is
     // the privileged enforce_lock=false path, and the contract pays any transient scope RAM.
     internal_transfer(title_owner, renter, vector<uint64_t>{asset_id}, memo, get_self(), false);
 
-    send_loglock(collection_name, asset_id, title_owner, renter, rental_end);
+    send_loglock(collection_name, asset_id, title_owner, renter, now, rental_end, rental_id);
 }
 
 
@@ -178,19 +202,23 @@ ACTION atomicassets::leaseextend(
 
     check(rental_end > lease_itr->rental_end, "rental_end must be later than the current end");
 
-    // Cap the total window from the fixed rental_start, so repeated extensions can't roll past the max.
-    check(rental_end - lease_itr->rental_start <= MAX_LEASE_SECONDS,
+    // Cap the total window from the fixed rental_start, so repeated extensions can't roll past the
+    // max. Deliberate asymmetry: a reclaim + re-lease gets a fresh window, because it necessarily
+    // transits the reclaimable state the cap exists to guarantee.
+    check(rental_end - lease_itr->rental_start <= get_lease_cap(),
         "rental_end exceeds the maximum lease duration");
 
     name title_owner = lease_itr->title_owner;
     name renter = lease_itr->renter;
     name collection_name = lease_itr->collection_name;
+    uint32_t rental_start = lease_itr->rental_start;
+    uint64_t rental_id = lease_itr->rental_id;
 
     leases.modify(lease_itr, market, [&](auto &_lease) {
         _lease.rental_end = rental_end;
     });
 
-    send_loglock(collection_name, asset_id, title_owner, renter, rental_end);
+    send_loglock(collection_name, asset_id, title_owner, renter, rental_start, rental_end, rental_id);
 }
 
 
@@ -212,6 +240,7 @@ ACTION atomicassets::reclaim(
     name title_owner = lease_itr->title_owner;
     name renter = lease_itr->renter;
     name collection_name = lease_itr->collection_name;
+    uint64_t rental_id = lease_itr->rental_id;
 
     // Erase the lock, then move the asset back under the contract's own authority (enforce_lock=false;
     // contract pays transient scope RAM). See logreclaim for why this path notifies no account that
@@ -223,7 +252,7 @@ ACTION atomicassets::reclaim(
         permission_level{get_self(), name("active")},
         get_self(),
         name("logreclaim"),
-        make_tuple(collection_name, asset_id, title_owner, renter)
+        make_tuple(collection_name, asset_id, title_owner, renter, rental_id)
     ).send();
 }
 
@@ -1608,7 +1637,9 @@ ACTION atomicassets::loglock(
     uint64_t asset_id,
     name title_owner,
     name renter,
-    uint32_t rental_end
+    uint32_t rental_start,
+    uint32_t rental_end,
+    uint64_t rental_id
 ) {
     require_auth(get_self());
 
@@ -1621,7 +1652,8 @@ ACTION atomicassets::logreclaim(
     name collection_name,
     uint64_t asset_id,
     name title_owner,
-    name renter
+    name renter,
+    uint64_t rental_id
 ) {
     require_auth(get_self());
 
@@ -1975,14 +2007,24 @@ void atomicassets::send_loglock(
     uint64_t asset_id,
     name title_owner,
     name renter,
-    uint32_t rental_end
+    uint32_t rental_start,
+    uint32_t rental_end,
+    uint64_t rental_id
 ) {
     action(
         permission_level{get_self(), name("active")},
         get_self(),
         name("loglock"),
-        make_tuple(collection_name, asset_id, title_owner, renter, rental_end)
+        make_tuple(collection_name, asset_id, title_owner, renter, rental_start, rental_end, rental_id)
     ).send();
+}
+
+
+/**
+*  The governance-configured lease-duration cap (defaults to the MAX_LEASE_SECONDS ceiling).
+*/
+uint32_t atomicassets::get_lease_cap() {
+    return get_rentalcfg().get_or_default(rentalcfg_s{}).max_lease_seconds;
 }
 
 

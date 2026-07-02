@@ -120,6 +120,9 @@ describe("non-custodial rental primitives", () => {
         return ASSET1;
     }
 
+    // The opaque market-side rental id threaded through leasestart/loglock/logreclaim.
+    const RENTAL_ID = 7;
+
     // Opens a lease (market-signed) for the given duration.
     async function leaseFor(seconds = ONE_HOUR) {
         const rentalEnd = nowSec() + seconds;
@@ -128,6 +131,7 @@ describe("non-custodial rental primitives", () => {
             renter.name.toString(),
             ASSET1,
             rentalEnd,
+            RENTAL_ID,
             "lease start"
         ]).send(`${market.name.toString()}@active`);
         return rentalEnd;
@@ -150,7 +154,8 @@ describe("non-custodial rental primitives", () => {
             renter: renter.name.toString(),
             collection_name: "testcollect1",
             rental_start: rentalEnd - ONE_HOUR,
-            rental_end: rentalEnd
+            rental_end: rentalEnd,
+            rental_id: RENTAL_ID
         }]);
     });
 
@@ -162,7 +167,7 @@ describe("non-custodial rental primitives", () => {
         const rentalEnd = nowSec() + ONE_HOUR;
         await expect(atomicassets.actions.leasestart([
             lister.name.toString(), renter.name.toString(),
-            ASSET1, rentalEnd, "lease"
+            ASSET1, rentalEnd, RENTAL_ID, "lease"
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("Leasing is disabled");
 
         // re-enable and confirm leasing works
@@ -179,7 +184,7 @@ describe("non-custodial rental primitives", () => {
         const rentalEnd = nowSec() + ONE_HOUR;
         await expect(atomicassets.actions.leasestart([
             lister.name.toString(), renter.name.toString(),
-            ASSET1, rentalEnd, "second lease"
+            ASSET1, rentalEnd, RENTAL_ID, "second lease"
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("already leased");
     });
 
@@ -188,13 +193,13 @@ describe("non-custodial rental primitives", () => {
         const rentalEnd = nowSec() + ONE_HOUR;
         await expect(atomicassets.actions.leasestart([
             lister.name.toString(), renter.name.toString(),
-            ASSET1, rentalEnd, "lease"
+            ASSET1, rentalEnd, RENTAL_ID, "lease"
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("not transferable");
     });
 
     test("leaseextend bumps the end without changing ownership", async () => {
         await mint();
-        await leaseFor();
+        const rentalEnd = await leaseFor();
         const newEnd = nowSec() + ONE_HOUR * 5;
         await atomicassets.actions.leaseextend([
             ASSET1, newEnd
@@ -202,6 +207,11 @@ describe("non-custodial rental primitives", () => {
 
         expect(assetsOf(renter)).toHaveLength(1); // still the renter's
         expect(leases()[0].rental_end).toBe(newEnd);
+        // rental_start and rental_id are FIXED across extensions: rental_start anchors
+        // the duration cap, and rental_id keeps identifying the lease-opening rental
+        // (extension payments carry their own ids in the market's logrental).
+        expect(leases()[0].rental_start).toBe(rentalEnd - ONE_HOUR);
+        expect(leases()[0].rental_id).toBe(RENTAL_ID);
     });
 
     test("leaseextend cannot revive an expired lease (no racing the reclaim)", async () => {
@@ -275,7 +285,7 @@ describe("non-custodial rental primitives", () => {
         // required authority of the configured market is missing
         await expect(atomicassets.actions.leasestart([
             lister.name.toString(), renter.name.toString(),
-            ASSET1, rentalEnd, "lease"
+            ASSET1, rentalEnd, RENTAL_ID, "lease"
         ]).send(`${third.name.toString()}@active`)).rejects.toThrow("missing required authority");
     });
 
@@ -294,12 +304,12 @@ describe("non-custodial rental primitives", () => {
         const rentalEnd = nowSec() + ONE_HOUR;
         await expect(atomicassets.actions.leasestart([
             lister.name.toString(), renter.name.toString(),
-            ASSET1, rentalEnd, "lease"
+            ASSET1, rentalEnd, RENTAL_ID, "lease"
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("missing required authority");
 
         await expect(atomicassets.actions.leasestart([
             lister.name.toString(), renter.name.toString(),
-            ASSET1, rentalEnd, "lease"
+            ASSET1, rentalEnd, RENTAL_ID, "lease"
         ]).send(`${third.name.toString()}@active`)).resolves.not.toThrow();
         expect(assetsOf(renter)).toHaveLength(1);
     });
@@ -383,7 +393,7 @@ describe("non-custodial rental primitives", () => {
         const rentalEnd = nowSec() + ONE_HOUR;
         await atomicassets.actions.leasestart([
             lister.name.toString(), evil.name.toString(),
-            ASSET1, rentalEnd, "lease to evil renter"
+            ASSET1, rentalEnd, RENTAL_ID, "lease to evil renter"
         ]).send(`${market.name.toString()}@active`);
         expect(assetsOf(evil)).toHaveLength(1);
 
@@ -428,7 +438,7 @@ describe("non-custodial rental primitives", () => {
         const tooLong = nowSec() + MAX_LEASE_SECONDS + ONE_HOUR;
         await expect(atomicassets.actions.leasestart([
             lister.name.toString(), renter.name.toString(),
-            ASSET1, tooLong, "too long"
+            ASSET1, tooLong, RENTAL_ID, "too long"
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("maximum lease duration");
     });
 
@@ -437,7 +447,7 @@ describe("non-custodial rental primitives", () => {
         const atCap = nowSec() + MAX_LEASE_SECONDS;
         await expect(atomicassets.actions.leasestart([
             lister.name.toString(), renter.name.toString(),
-            ASSET1, atCap, "at cap"
+            ASSET1, atCap, RENTAL_ID, "at cap"
         ]).send(`${market.name.toString()}@active`)).resolves.not.toThrow();
         expect(assetsOf(renter)).toHaveLength(1);
     });
@@ -449,6 +459,54 @@ describe("non-custodial rental primitives", () => {
         // total window measured from the fixed rental_start, not from "now"
         await expect(atomicassets.actions.leaseextend([
             ASSET1, rentalStart + MAX_LEASE_SECONDS + ONE_HOUR
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("maximum lease duration");
+    });
+
+    // ----------------------------------- governance cap (setleasecap, <= protocol ceiling)
+
+    test("setleasecap lowers the cap for leasestart and leaseextend, bounded by the ceiling", async () => {
+        await mint();
+
+        // only the contract may set it, and never above the compile-time ceiling or to zero
+        await expect(atomicassets.actions.setleasecap([
+            ONE_HOUR
+        ]).send(`${lister.name.toString()}@active`)).rejects.toThrow("missing required authority");
+        await expect(atomicassets.actions.setleasecap([
+            MAX_LEASE_SECONDS + 1
+        ]).send(`${atomicassets.name.toString()}@active`)).rejects.toThrow("exceeds the protocol ceiling");
+        await expect(atomicassets.actions.setleasecap([
+            0
+        ]).send(`${atomicassets.name.toString()}@active`)).rejects.toThrow("must be positive");
+
+        // cap to 2 hours: a 3-hour lease is rejected, a 2-hour lease passes
+        await atomicassets.actions.setleasecap([
+            2 * ONE_HOUR
+        ]).send(`${atomicassets.name.toString()}@active`);
+        await expect(atomicassets.actions.leasestart([
+            lister.name.toString(), renter.name.toString(),
+            ASSET1, nowSec() + 3 * ONE_HOUR, RENTAL_ID, "too long for cap"
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("maximum lease duration");
+        const rentalEnd = await leaseFor(2 * ONE_HOUR);
+
+        // the lowered cap also bounds the total extended window from rental_start
+        await expect(atomicassets.actions.leaseextend([
+            ASSET1, rentalEnd + ONE_HOUR
+        ]).send(`${market.name.toString()}@active`)).rejects.toThrow("maximum lease duration");
+    });
+
+    test("setrentmkt preserves the configured cap (and vice versa)", async () => {
+        await mint();
+        await atomicassets.actions.setleasecap([
+            2 * ONE_HOUR
+        ]).send(`${atomicassets.name.toString()}@active`);
+
+        // re-pointing the market must not reset max_lease_seconds to the default
+        await atomicassets.actions.setrentmkt([
+            market.name.toString()
+        ]).send(`${atomicassets.name.toString()}@active`);
+        await expect(atomicassets.actions.leasestart([
+            lister.name.toString(), renter.name.toString(),
+            ASSET1, nowSec() + 3 * ONE_HOUR, RENTAL_ID, "over the preserved cap"
         ]).send(`${market.name.toString()}@active`)).rejects.toThrow("maximum lease duration");
     });
 });

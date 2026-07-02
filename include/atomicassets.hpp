@@ -42,11 +42,16 @@ public:
         name rental_market
     );
 
+    ACTION setleasecap(
+        uint32_t max_lease_seconds
+    );
+
     ACTION leasestart(
         name title_owner,
         name renter,
         uint64_t asset_id,
         uint32_t rental_end,
+        uint64_t rental_id,
         string memo
     );
 
@@ -282,14 +287,17 @@ public:
         uint64_t asset_id,
         name title_owner,
         name renter,
-        uint32_t rental_end
+        uint32_t rental_start,
+        uint32_t rental_end,
+        uint64_t rental_id
     );
 
     ACTION logreclaim(
         name collection_name,
         uint64_t asset_id,
         name title_owner,
-        name renter
+        name renter,
+        uint64_t rental_id
     );
 
     ACTION lognewoffer(
@@ -472,6 +480,7 @@ private:
         name             collection_name;
         uint32_t         rental_start;  // sec_since_epoch the lease was first opened (fixed across extensions)
         uint32_t         rental_end;    // sec_since_epoch the lease expires
+        uint64_t         rental_id;     // opaque market-side rental id, echoed in loglock/logreclaim
 
         uint64_t primary_key()    const { return asset_id; };
         uint64_t by_title_owner() const { return title_owner.value; };
@@ -528,7 +537,10 @@ private:
     // absent row) means disabled, so a fresh deploy is off until setrentmkt("atomicmarket"); set it
     // back to name("") to kill-switch all leasing. Not hardcoded - the market account differs per chain.
     TABLE rentalcfg_s {
-        name        rental_market = name("");
+        name        rental_market     = name("");
+        // Governance-settable lease-duration cap, bounded above by the compile-time
+        // MAX_LEASE_SECONDS protocol ceiling (see setleasecap).
+        uint32_t    max_lease_seconds = MAX_LEASE_SECONDS;
     };
     typedef singleton <name("rentalcfg"), rentalcfg_s>         rentalcfg_t;
 
@@ -612,7 +624,10 @@ private:
     name check_rental_market();
 
     // Emits the loglock action (shared by leasestart and leaseextend).
-    void send_loglock(name collection_name, uint64_t asset_id, name title_owner, name renter, uint32_t rental_end);
+    void send_loglock(name collection_name, uint64_t asset_id, name title_owner, name renter,
+        uint32_t rental_start, uint32_t rental_end, uint64_t rental_id);
+
+    uint32_t get_lease_cap();
 
     void notify_collection_accounts(
         name collection_name

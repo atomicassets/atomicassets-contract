@@ -155,6 +155,7 @@ namespace atomicassets {
         name             collection_name;
         uint32_t         rental_start;
         uint32_t         rental_end;
+        uint64_t         rental_id;
 
         uint64_t primary_key()    const { return asset_id; };
         uint64_t by_title_owner() const { return title_owner.value; };
