@@ -187,48 +187,4 @@ describe("test burnasset contract", () => {
             "1099511627776"
         ]).send(`${user2.name.toString()}@active`)).rejects.toThrow("missing required authority");
     });
-
-    test("burn asset with holder record deletes the holder entry", async () => {
-        expect.assertions(3);
-
-        // Mint asset for user1
-        await atomicassets.actions.mintasset([
-            user1.name.toString(),
-            "testcollect1",
-            "testschema",
-            -1,
-            user1.name.toString(),
-            [],
-            [],
-            []
-        ]).send(`${user1.name.toString()}@active`);
-
-        // Move asset from owner (user1) to holder (user2)
-        await atomicassets.actions.move([
-            user1.name.toString(), // owner
-            user1.name.toString(), // from (owner)
-            user2.name.toString(), // to (new holder)
-            ["1099511627776"],
-            'Move to holder for burning test'
-        ]).send(`${user1.name.toString()}@owner`);
-
-        // Verify holder record exists
-        let holders = atomicassets.tables.holders(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(holders).toHaveLength(1);
-        expect(holders[0]).toMatchObject({
-            asset_id: "1099511627776",
-            owner: user1.name.toString(),
-            holder: user2.name.toString()
-        });
-
-        // Burn the asset (owner can burn even when held by someone else)
-        await atomicassets.actions.burnasset([
-            user1.name.toString(),
-            "1099511627776"
-        ]).send(`${user1.name.toString()}@active`);
-
-        // Verify holder record was deleted along with the asset
-        holders = atomicassets.tables.holders(nameToBigInt(atomicassets.name)).getTableRows();
-        expect(holders).toHaveLength(0);
-    });
 });

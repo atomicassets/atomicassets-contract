@@ -148,19 +148,6 @@ namespace atomicassets {
     typedef multi_index <name("assets"), assets_s> assets_t;
 
 
-    struct holders_s {
-        uint64_t         asset_id;
-        name             holder;
-        name             owner;
-
-        uint64_t primary_key() const { return asset_id; };
-        uint64_t by_holder() const { return holder.value; };
-    };
-    typedef multi_index <name("holders"), holders_s,  
-        indexed_by<name("holder"), const_mem_fun <holders_s, uint64_t, &holders_s::by_holder>>>
-    holders_t;
-
-
     struct offers_s {
         uint64_t          offer_id;
         name              sender;
@@ -228,6 +215,5 @@ namespace atomicassets {
     template_mutables_t get_template_mutables(name collection_name) {return template_mutables_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
 
     assets_t            get_assets(name owner) {return assets_t(ATOMICASSETS_ACCOUNT, owner.value);}
-    holders_t           get_holders() {return holders_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
 
 };

@@ -34,14 +34,6 @@ public:
         string memo
     );
 
-    ACTION move(
-        name owner,
-        name from,
-        name to,
-        vector <uint64_t> asset_ids,
-        string memo
-    );
-
     ACTION createcol(
         name author,
         name collection_name,
@@ -260,15 +252,6 @@ public:
         string memo
     );
 
-    ACTION logmove(
-        name collection_name,
-        name owner,
-        name from,
-        name to,
-        vector <uint64_t> asset_ids,
-        string memo
-    );
-
     ACTION lognewoffer(
         uint64_t offer_id,
         name sender,
@@ -438,19 +421,6 @@ private:
     typedef multi_index <name("assets"), assets_s> assets_t;
 
 
-    TABLE holders_s {
-        uint64_t         asset_id;
-        name             holder;
-        name             owner;
-
-        uint64_t primary_key() const { return asset_id; };
-        uint64_t by_holder() const { return holder.value; };
-    };
-    typedef multi_index <name("holders"), holders_s,  
-        indexed_by<name("holder"), const_mem_fun <holders_s, uint64_t, &holders_s::by_holder>>>
-    holders_t;
-
-
     TABLE offers_s {
         uint64_t          offer_id;
         name              sender;
@@ -518,7 +488,6 @@ private:
     template_mutables_t get_template_mutables(name collection_name) {return template_mutables_t(get_self(), collection_name.value);}
 
     assets_t            get_assets(name owner) {return assets_t(get_self(), owner.value);}
-    holders_t           get_holders() {return holders_t(get_self(), get_self().value);}
 
     /*
         **************************
