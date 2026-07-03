@@ -86,109 +86,6 @@ ACTION atomicassets::transfer(
 }
 
 /**
-*  Moves one or more assets to another account
-*  @required_auth of the true owner of the asset
-*  Cannot have notifications for the from & to, exploitable
-*/
-ACTION atomicassets::move(
-    name owner,
-    name from,
-    name to,
-    vector <uint64_t> asset_ids,
-    string memo
-) {
-    require_auth(owner);
-    require_recipient(owner);
-
-    check(is_account(from), "from account does not exist");
-    check(is_account(to), "to account does not exist");
-
-    check(from != to, "from & to fields cannot be the same");
-
-    check(asset_ids.size() != 0, "asset_ids needs to contain at least one id");
-    check(memo.length() <= 256, "A move memo can only be 256 characters max");
-
-    vector <uint64_t> asset_ids_copy = asset_ids;
-    std::sort(asset_ids_copy.begin(), asset_ids_copy.end());
-    check(std::adjacent_find(asset_ids_copy.begin(), asset_ids_copy.end()) == asset_ids_copy.end(),
-        "Can't move the same asset multiple times");
-
-    assets_t owner_assets = get_assets(owner);
-    holders_t holders = get_holders();
-
-    map <name, vector <uint64_t>> collection_to_assets_moved = {};
-
-    for (uint64_t & asset_id : asset_ids) {
-        auto asset_itr = owner_assets.find(asset_id);
-        if (asset_itr == owner_assets.end()){
-            check(false,
-                ("Owner doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
-        }
-            
-
-        //Existence doesn't have to be checked because this always has to exist
-        if (asset_itr->template_id >= 0) {
-            templates_t collection_templates = get_templates(asset_itr->collection_name);
-
-            auto template_itr = collection_templates.find(asset_itr->template_id);
-            if (!template_itr->transferable){
-                check(false,
-                    ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
-            }
-        }
-
-        auto holders_itr = holders.find(asset_id);
-        if (holders_itr == holders.end()){
-            if (from != owner){
-                check(false, 
-                    ("Only the owner can move this asset (ID: " + to_string(asset_id) + ")").c_str());
-            }
-                
-            // Emplaces new holder
-            holders.emplace(owner, [&](auto &_holders_row){
-                _holders_row.asset_id = asset_id;
-                _holders_row.holder = to;
-                _holders_row.owner = owner;
-            });
-        }
-
-        if (holders_itr != holders.end()){
-            if (holders_itr->holder != from){
-                check(false, 
-                    ("At least one asset invalidates the 'from:holder' constraint (ID: " + to_string(asset_id) + ")").c_str());
-            }
-
-            // Deletes row if returning to owner
-            if (to == owner){
-                holders.erase(holders_itr);
-            } else { // Modifies row to move holdership to the new "to" wallet
-                holders.modify(holders_itr, owner, [&](auto &_holders_row){
-                    _holders_row.holder = to;
-                });
-            }
-        }
-
-        //This is needed for sending notifications later
-        if (collection_to_assets_moved.find(asset_itr->collection_name) !=
-            collection_to_assets_moved.end()) {
-            collection_to_assets_moved[asset_itr->collection_name].push_back(asset_id);
-        } else {
-            collection_to_assets_moved[asset_itr->collection_name] = {asset_id};
-        }
-    }
-
-    // Sending notifications
-    for (const auto&[collection, assets_moved] : collection_to_assets_moved) {
-        action(
-            permission_level{get_self(), name("active")},
-            get_self(),
-            name("logmove"),
-            make_tuple(collection, owner, from, to, assets_moved, memo)
-        ).send();
-    }
-}
-
-/**
 *  Creates a new collection
 */
 ACTION atomicassets::createcol(
@@ -1213,14 +1110,6 @@ ACTION atomicassets::burnasset(
         check(template_itr->burnable, "The asset is not burnable");
     };
 
-    holders_t holders = get_holders();
-
-    // Checks to see if the asset has been rented out & erases the "holdership"
-    auto holders_itr = holders.find(asset_id);
-    if (holders_itr != holders.end()){
-        holders.erase(holders_itr);
-    }    
-
     if (asset_itr->backed_tokens.size() != 0) {
         auto balances = get_balances();
         auto balance_itr = balances.find(asset_owner.value);
@@ -1565,20 +1454,6 @@ ACTION atomicassets::logtransfer(
     notify_collection_accounts(collection_name);
 }
 
-ACTION atomicassets::logmove(
-    name collection_name,
-    name owner,
-    name from,
-    name to,
-    vector <uint64_t> asset_ids,
-    string memo
-) {
-    require_auth(get_self());
-
-    notify_collection_accounts(collection_name);
-}
-
-
 ACTION atomicassets::lognewoffer(
     uint64_t offer_id,
     name sender,
@@ -1809,7 +1684,6 @@ void atomicassets::internal_transfer(
 
     assets_t from_assets = get_assets(from);
     assets_t to_assets = get_assets(to);
-    holders_t holders = get_holders();
 
     map <name, vector <uint64_t>> collection_to_assets_transferred = {};
 
@@ -1828,19 +1702,6 @@ void atomicassets::internal_transfer(
             if (!template_itr->transferable){
                 check(false, 
                     ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
-            }
-        }
-
-        auto holders_itr = holders.find(asset_id);
-        if (holders_itr != holders.end()){
-
-            // Deletes row if transfering to holder
-            if (to == holders_itr->holder){
-                holders.erase(holders_itr);
-            } else { // Modifies row to move ownership to the new "to" wallet
-                holders.modify(holders_itr, from, [&](auto &_holders_row){
-                    _holders_row.owner = to;
-                });
             }
         }
 
