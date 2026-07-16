@@ -1,6 +1,9 @@
-*.abi
-*.wasm
+build/*
+*.wat
 .eosproj
 .DS_STORE
 
 .idea
+node_modules
+yarn-error.log
+.vscode

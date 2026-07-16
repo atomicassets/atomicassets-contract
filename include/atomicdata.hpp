@@ -37,6 +37,12 @@ namespace atomicdata {
         std::string type;
     };
 
+    struct FORMAT_TYPE {
+        std::string name;
+        std::string mediatype;
+        std::string info;
+    };
+
     static constexpr uint64_t RESERVED = 4;
 
 

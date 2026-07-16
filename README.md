@@ -9,7 +9,6 @@ It offers a powerful feature set while keeping unnecessary complexity to a minim
 - API: https://github.com/pinknetworkx/eosio-contract-api
 - Live API example: https://wax.api.atomicassets.io/atomicassets/docs/
 - Javascript module: https://www.npmjs.com/package/atomicassets
-- Test cases (using Hydra framework): https://github.com/pinknetworkx/atomicassets-contract-tests
 - AtomicMarket (open source marketplace): https://github.com/pinknetworkx/atomicmarket-contract
 - Telegram group: https://t.me/atomicassets
 
@@ -47,3 +46,49 @@ It offers a powerful feature set while keeping unnecessary complexity to a minim
 
 	AtomicAssets features a native implementation of two sided trade offers (similar to Steam or WAX Express Trade). This allows creating and accepting offers **with a single action**.
 	The implementation of the offers also allows for **peer to peer marketplaces** that don't require transferring ownership to a market contract.
+
+## Build contract
+
+```bash
+$ make clean
+$ make build
+```
+
+## Testing
+
+### Test Framework
+- Uses Vert framework for EOSIO contract testing (migrated from Hydra)
+- Tests written in JavaScript using Jest
+- Test configuration in `jest.config.js` with 10-minute timeout
+
+### Export contract memory
+
+- VeRT requires exported memory in your contract.
+- If you are using CDT to compile your contracts, you need to export memory in your contract manually prior to version 4.1.0.
+
+```bash
+# if you don't have wabt:
+$ apt-get install wabt
+
+$ make export-memory
+```
+
+### Running Tests
+
+```bash
+$ yarn install
+$ yarn test        # Run all tests
+$ yarn test addconf  # Run specific test files matching pattern
+```
+
+### Test Structure
+Tests are organized in directories by functionality:
+- `tests/admin-actions/` - Administrative operations
+- `tests/asset-actions/` - Asset creation and management
+- `tests/author-swap-actions/` - Collection author swap offers
+- `tests/collection-actions/` - Collection management
+- `tests/deposit-withdraw-back-burn-actions/` - Token backing operations
+- `tests/interface-header/` - Interface header consumer compile check
+- `tests/schema-actions/` - Schema operations
+- `tests/template-actions/` - Template management
+- `tests/transfer-offer-actions/` - Transfer and trading functionality

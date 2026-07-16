@@ -49,6 +49,29 @@ namespace atomicassets {
         string type;
     };
 
+    struct FORMAT_TYPE {
+        std::string name;
+        std::string mediatype;
+        std::string info;
+    };
+
+    /*
+        **************
+        *** Tables ***
+        **************
+    */
+
+    struct author_swaps_s {
+        name             collection_name;
+        name             current_author;
+        name             new_author;
+        uint32_t         acceptance_date;
+
+        uint64_t primary_key() const { return collection_name.value; };
+    };
+    typedef multi_index <name("authorswaps"), author_swaps_s> author_swaps_t;
+
+
     struct collections_s {
         name             collection_name;
         name             author;
@@ -60,7 +83,6 @@ namespace atomicassets {
 
         uint64_t primary_key() const { return collection_name.value; };
     };
-
     typedef multi_index <name("collections"), collections_s> collections_t;
 
 
@@ -71,8 +93,17 @@ namespace atomicassets {
 
         uint64_t primary_key() const { return schema_name.value; }
     };
-
     typedef multi_index <name("schemas"), schemas_s> schemas_t;
+
+
+    //Scope: collection_name
+    struct schema_types_s {
+        name            schema_name;
+        vector <FORMAT_TYPE> format_type;
+
+        uint64_t primary_key() const { return schema_name.value; }
+    };
+    typedef multi_index <name("schematypes"), schema_types_s> schema_types_t;
 
 
     //Scope: collection_name
@@ -87,8 +118,18 @@ namespace atomicassets {
 
         uint64_t primary_key() const { return (uint64_t) template_id; }
     };
-
     typedef multi_index <name("templates"), templates_s> templates_t;
+
+
+    //Scope: collection_name
+    struct template_mutables_s {
+        int32_t          template_id;
+        name             schema_name;
+        vector <uint8_t> mutable_serialized_data;
+
+        uint64_t primary_key() const { return (uint64_t) template_id; }
+    };
+    typedef multi_index <name("templates2"), template_mutables_s> template_mutables_t;
 
 
     //Scope: owner
@@ -104,7 +145,6 @@ namespace atomicassets {
 
         uint64_t primary_key() const { return asset_id; };
     };
-
     typedef multi_index <name("assets"), assets_s> assets_t;
 
 
@@ -123,11 +163,11 @@ namespace atomicassets {
 
         uint64_t by_recipient() const { return recipient.value; };
     };
-
     typedef multi_index <name("offers"), offers_s,
         indexed_by < name("sender"), const_mem_fun < offers_s, uint64_t, &offers_s::by_sender>>,
     indexed_by <name("recipient"), const_mem_fun < offers_s, uint64_t, &offers_s::by_recipient>>>
     offers_t;
+
 
     struct balances_s {
         name           owner;
@@ -135,8 +175,7 @@ namespace atomicassets {
 
         uint64_t primary_key() const { return owner.value; };
     };
-
-    typedef multi_index <name("balances"), balances_s>       balances_t;
+    typedef multi_index <name("balances"), balances_s>         balances_t;
 
 
     struct config_s {
@@ -146,30 +185,35 @@ namespace atomicassets {
         vector <FORMAT>          collection_format = {};
         vector <extended_symbol> supported_tokens  = {};
     };
-    typedef singleton <name("config"), config_s>             config_t;
+    typedef singleton <name("config"), config_s>               config_t;
+
 
     struct tokenconfigs_s {
         name        standard = name("atomicassets");
-        std::string version  = string("1.2.3");
+        std::string version  = string("2.0.0");
     };
-    typedef singleton <name("tokenconfigs"), tokenconfigs_s> tokenconfigs_t;
+    typedef singleton <name("tokenconfigs"), tokenconfigs_s>   tokenconfigs_t;
 
+    /*
+        *********************
+        *** Table Fetches ***
+        *********************
+    */
 
-    collections_t  collections  = collections_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);
-    offers_t       offers       = offers_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);
-    balances_t     balances     = balances_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);
-    config_t       config       = config_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);
-    tokenconfigs_t tokenconfigs = tokenconfigs_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);
+    author_swaps_t      get_author_swaps() {return author_swaps_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
+    collections_t       get_collections() {return collections_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
 
-    assets_t get_assets(name acc) {
-        return assets_t(ATOMICASSETS_ACCOUNT, acc.value);
-    }
+    offers_t            get_offers() {return offers_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
+    balances_t          get_balances() {return balances_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
+    config_t            get_config() {return config_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
+    tokenconfigs_t      get_tokenconfigs() {return tokenconfigs_t(ATOMICASSETS_ACCOUNT, ATOMICASSETS_ACCOUNT.value);}
 
-    schemas_t get_schemas(name collection_name) {
-        return schemas_t(ATOMICASSETS_ACCOUNT, collection_name.value);
-    }
+    schemas_t           get_schemas(name collection_name) {return schemas_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
+    schema_types_t      get_schema_types(name collection_name) {return schema_types_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
 
-    templates_t get_templates(name collection_name) {
-        return templates_t(ATOMICASSETS_ACCOUNT, collection_name.value);
-    }
+    templates_t         get_templates(name collection_name) {return templates_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
+    template_mutables_t get_template_mutables(name collection_name) {return template_mutables_t(ATOMICASSETS_ACCOUNT, collection_name.value);}
+
+    assets_t            get_assets(name owner) {return assets_t(ATOMICASSETS_ACCOUNT, owner.value);}
+
 };

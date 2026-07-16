@@ -1,0 +1,20 @@
+{
+  "name": "contract",
+  "version": "1.0.0",
+  "description": "Testing contract smart contract with @vaulta/vert",
+  "main": "",
+  "scripts": {
+    "test": "jest",
+    "prettier": "prettier --single-quote --trailing-comma es5 --write **/*.js"
+  },
+  "dependencies": {
+    "@vaulta/vert": "^2.1.1"
+  },
+  "devDependencies": {
+    "jest": "^25.1.0",
+    "prettier": "^2.7.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": ""
+}
