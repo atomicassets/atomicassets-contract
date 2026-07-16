@@ -3,15 +3,15 @@ name: Contracts CI
 # Builds the AtomicAssets contract with the pinned CDT and runs the VeRT
 # (@vaulta/vert) test suite. Runs on GitHub-hosted runners using the public CDT
 # release (the FACINGS monorepo's self-hosted + private-GHCR CI cannot be reached
-# from this public org). The "harness guard" lets the workflow live on `master`
+# from this public org). The "harness guard" lets the workflow live on `main`
 # (which has no test harness until v2 lands) without failing — it skips cleanly
 # there and runs for real once Makefile/package.json/tests/ are present.
 
 on:
   push:
-    branches: [master, feat/v2-integration, feat/v2-tests-integration, "ci/**"]
+    branches: [main, feat/v2-integration, feat/v2-tests-integration, "ci/**"]
   pull_request:
-    branches: [master, feat/v2-integration, feat/v2-tests-integration]
+    branches: [main, feat/v2-integration, feat/v2-tests-integration]
   workflow_dispatch:
 
 permissions:
