@@ -383,7 +383,8 @@ ACTION atomicassets::createauswap(
 /**
 * Accepts an author swap, with time constraints based on 'owner' or 'active' permissions used when creating the author swap
 * With default parameters, author swaps created by 'active' permissions can only be accepted after 1 week has passed
-* With default parameters, author swaps remain valid for up to 3 weeks
+* A swap expires AUTHOR_SWAP_TIME_DELTA after its acceptance_date, so one created with 'active'
+* permissions is valid for 2 weeks from creation and one created with 'owner' permissions for 1 week
 */
 
 ACTION atomicassets::acceptauswap(
@@ -404,8 +405,10 @@ ACTION atomicassets::acceptauswap(
 
     uint32_t now = eosio::current_time_point().sec_since_epoch();
 
-    check (now > author_swaps_itr->acceptance_date, 
-        ("[ " + to_string(author_swaps_itr->acceptance_date - now) + " ] seconds remaining until this author swap can be accepted").c_str());
+    if (now < author_swaps_itr->acceptance_date) {
+        check (false,
+            ("[ " + to_string(author_swaps_itr->acceptance_date - now) + " ] seconds remaining until this author swap can be accepted").c_str());
+    }
 
     check (now < author_swaps_itr->acceptance_date + AUTHOR_SWAP_TIME_DELTA, "Author swap for this collection has expired");
 
@@ -838,7 +841,7 @@ ACTION atomicassets::setassetdata(
 /**
 *  Updates the mutable data of a template within the templatedata table
 *  If the row doesn't exist within the template, it emplaces a new row
-*  If the new_mutable_data is empty & the row exists, it eraes the row
+*  If the new_mutable_data is empty & the row exists, it erases the row
 *  @required_auth authorized_editor, who is within the authorized_accounts list of the collection
                   specified in the related template
 */

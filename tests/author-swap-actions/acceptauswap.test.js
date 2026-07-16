@@ -99,6 +99,42 @@ describe('test acceptauswap contract', () => {
         expect(authorSwaps).toHaveLength(0);
     });
 
+    test("successfully accept author swap exactly at acceptance_date", async () => {
+        // Create collection
+        await atomicassets.actions.createcol([
+            user1.name.toString(),
+            "testcollect1",
+            true,
+            [],
+            [],
+            0.05,
+            []
+        ]).send(`${user1.name.toString()}@active`);
+
+        // Create author swap with active permission (1 week delay)
+        await atomicassets.actions.createauswap([
+            "testcollect1",
+            user2.name.toString(),
+            false // active permission = 1 week delay
+        ]).send(`${user1.name.toString()}@active`);
+
+        const acceptanceDate = atomicassets.tables
+            .authorswaps(nameToBigInt(atomicassets.name))
+            .getTableRows()[0].acceptance_date;
+
+        // Land exactly on acceptance_date: the boundary second is acceptable, not too early
+        const now = Math.floor(blockchain.timestamp.toMilliseconds() / 1000);
+        blockchain.addTime(TimePoint.fromMilliseconds((acceptanceDate - now) * 1000));
+        expect(Math.floor(blockchain.timestamp.toMilliseconds() / 1000)).toBe(acceptanceDate);
+
+        await expect(atomicassets.actions.acceptauswap([
+            "testcollect1"
+        ]).send(`${user2.name.toString()}@active`)).resolves.not.toThrow();
+
+        const collections = atomicassets.tables.collections(nameToBigInt(atomicassets.name)).getTableRows();
+        expect(collections[0].author).toBe(user2.name.toString());
+    });
+
     test("throw if collection does not exist", async () => {
         await expect(atomicassets.actions.acceptauswap([
             "nonexistent"

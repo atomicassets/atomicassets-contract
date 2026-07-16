@@ -1,6 +1,17 @@
 const { Blockchain, nameToBigInt } = require("@vaulta/vert");
 
 describe('test createtempl2 contract', () => {
+
+// Locate an inline action's trace by action name. Indexing executionTraces by
+// position breaks whenever the number or order of inline actions changes, which
+// is unrelated to what these assertions are checking.
+const findTrace = (actionName) => {
+    const trace = blockchain.executionTraces.find(
+        (t) => t.action.toString() === actionName
+    );
+    expect(trace).toBeDefined();
+    return trace;
+};
     let blockchain;
     let atomicassets;
     let user1;
@@ -472,7 +483,7 @@ describe('test createtempl2 contract', () => {
         ]).send(`${user1.name.toString()}@active`);
 
         // Verify lognewtempl action was called
-        const expectLogAction = blockchain.executionTraces[1];
+        const expectLogAction = findTrace('lognewtempl');
         expect(expectLogAction.contract.toString()).toBe(atomicassets.name.toString());
         expect(expectLogAction.action.toString()).toBe('lognewtempl');
         expect(expectLogAction.data.template_id.toString()).toBe("1");
@@ -500,7 +511,7 @@ describe('test createtempl2 contract', () => {
         ]).send(`${user1.name.toString()}@active`);
 
         // Verify logsetdatatl action was called for mutable data
-        const expectLogDataAction = blockchain.executionTraces[2];
+        const expectLogDataAction = findTrace('logsetdatatl');
         expect(expectLogDataAction.contract.toString()).toBe(atomicassets.name.toString());
         expect(expectLogDataAction.action.toString()).toBe('logsetdatatl');
         expect(expectLogDataAction.data.collection_name.toString()).toBe('testcollect1');

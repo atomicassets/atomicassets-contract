@@ -83,10 +83,12 @@ $ yarn test addconf  # Run specific test files matching pattern
 
 ### Test Structure
 Tests are organized in directories by functionality:
-- `tests/Admin Actions/` - Administrative operations
-- `tests/Asset Actions/` - Asset creation and management
-- `tests/Collection Actions/` - Collection management
-- `tests/Schema Actions/` - Schema operations
-- `tests/Template Actions/` - Template management
-- `tests/Transfer-Offer Actions/` - Transfer and trading functionality
-- `tests/Deposit-Withdraw-Back-Burn Actions/` - Token backing operations
+- `tests/admin-actions/` - Administrative operations
+- `tests/asset-actions/` - Asset creation and management
+- `tests/author-swap-actions/` - Collection author swap offers
+- `tests/collection-actions/` - Collection management
+- `tests/deposit-withdraw-back-burn-actions/` - Token backing operations
+- `tests/interface-header/` - Interface header consumer compile check
+- `tests/schema-actions/` - Schema operations
+- `tests/template-actions/` - Template management
+- `tests/transfer-offer-actions/` - Transfer and trading functionality
