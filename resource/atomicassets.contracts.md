@@ -673,18 +673,16 @@ This action may only be called with the permission of {{owner}}.
 
 ---
 spec_version: "0.2.0"
-title: Backs an asset with tokens
-summary: '{{nowrap payer}} backs the asset with the ID {{nowrap asset_id}} with {{nowrap token_to_back}}'
+title: Backs an asset with tokens (deprecated, always fails)
+summary: '{{nowrap payer}} attempts to back the asset with the ID {{nowrap asset_id}}; native backing is deprecated and this action fails'
 icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
 ---
 
 <b>Description:</b>
 <div class="description">
-{{payer}} backs an the asset with the ID {{asset_id}} owned by {{asset_owner}} with {{token_to_back}}.
-{{payer}} must have at least as many tokens in his balance. {{token_to_back}} will be removed from {{payer}}'s balance.
-The tokens backed to this asset can be retreived by burning the asset, in which case the owner at the time of the burn will receive the tokens.
+Native backing is deprecated on the AtomicAssets v2 contract. This action always fails and no tokens are moved.
 
-{{payer}} pays for the full RAM cost of the asset.
+Assets backed before v2 are unaffected: burning such an asset still releases its backed tokens, and the owner at the time of the burn receives them.
 </div>
 
 <b>Clauses:</b>
