@@ -673,7 +673,7 @@ This action may only be called with the permission of {{owner}}.
 
 ---
 spec_version: "0.2.0"
-title: Backs an asset with tokens (deprecated, always fails)
+title: Deprecated, always fails (formerly: backs an asset with tokens)
 summary: '{{nowrap payer}} attempts to back the asset with the ID {{nowrap asset_id}}; native backing is deprecated and this action fails'
 icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
 ---
@@ -682,7 +682,7 @@ icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CF
 <div class="description">
 Native backing is deprecated on the AtomicAssets v2 contract. This action always fails and no tokens are moved.
 
-Assets backed before v2 are unaffected: burning such an asset still releases its backed tokens, and the owner at the time of the burn receives them.
+Assets backed before v2 are unaffected. Burning such an asset credits its backed tokens to the burner's AtomicAssets token balance, which is then claimed with the withdraw action; the tokens are not transferred directly by the burn.
 </div>
 
 <b>Clauses:</b>
