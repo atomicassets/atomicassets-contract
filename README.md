@@ -38,9 +38,9 @@ It offers a powerful feature set while keeping unnecessary complexity to a minim
 
 	Smart Contracts can get notified automatically about any relevant events related to their assets. This enables them to make the assets an integral part of their game rather than just a static token.
 	
-- **Backing assets with Fungible Tokens**
+- **Backing assets with Fungible Tokens (disabled in v2)**
 
-	Assets can be backed by standard fungible tokens (e.g. EOS / WAX). Those tokens can only be freed by burning the asset, thus allowing dapps to give their asset a guaranteed intrinsic value.
+	Native backing is deprecated. The `backasset` action fails on the v2 contract, so no new asset can be backed. Value already backed is unaffected: burning an asset still releases its backed tokens to the owner's balance, and `withdraw` continues to work.
 	
 - **Powerful Trade Offers**
 
