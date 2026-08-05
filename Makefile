@@ -1,6 +1,6 @@
 build:
 	mkdir -p build
-	cdt-cpp -abigen -contract=atomicassets -I./include src/atomicassets.cpp -o build/atomicassets.wasm
+	cdt-cpp -abigen -contract=atomicassets -I./include -R./resource src/atomicassets.cpp -o build/atomicassets.wasm
 	$(MAKE) build-test-consumer
 
 # Test-only fixture: a minimal EXTERNAL contract that reads atomicassets tables
