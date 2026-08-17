@@ -37,6 +37,13 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # scripts/release-notes.sh needs only bash, git, awk and sed, and its
+      # paired test builds its own throwaway repository, so it sits outside the
+      # harness guard below and runs before the CDT install. Every ref that
+      # carries this step also carries the script, so the step is unconditional.
+      - name: Run release-notes composer test
+        run: bash scripts/release-notes.test.sh
+
       - name: Check for test harness
         id: harness
         run: |

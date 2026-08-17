@@ -54,6 +54,13 @@ $ make clean
 $ make build
 ```
 
+## Releases
+
+Tagged versions are published as GitHub Releases with the `atomicassets.wasm`,
+`atomicassets.abi` and `SHA256SUMS` assets attached.
+[RELEASING.md](RELEASING.md) covers how a release is cut and what its notes
+carry, and [CHANGELOG.md](CHANGELOG.md) holds the notes for each version.
+
 ## Testing
 
 ### Test Framework
@@ -92,3 +99,8 @@ Tests are organized in directories by functionality:
 - `tests/schema-actions/` - Schema operations
 - `tests/template-actions/` - Template management
 - `tests/transfer-offer-actions/` - Transfer and trading functionality
+
+## Credits
+
+AtomicAssets is the work of many contributors, recorded in
+[AUTHORS.md](AUTHORS.md).
