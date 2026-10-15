@@ -847,3 +847,189 @@ icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CF
 <div class="clauses">
 This action may only be called with the permission of {{payer}}.
 </div>
+
+<h1 class="contract">createtempl2</h1>
+
+---
+spec_version: "0.2.0"
+title: Create a template with mutable data
+summary: '{{nowrap authorized_creator}} creates a new template which belongs to the {{nowrap collection_name}} collection and uses the {{nowrap schema_name}} schema'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+{{authorized_creator}} creates a new template which belongs to the {{collection_name}} collection.
+
+The schema {{schema_name}} is used for the serialization of the template's data.
+
+{{#if transferable}}The assets within this template will be transferable
+{{else}}The assets within this template will not be transferable
+{{/if}}
+
+{{#if burnable}}The assets within this template will be burnable
+{{else}}The assets within this template will not be burnable
+{{/if}}
+
+{{#if max_supply}}A maximum of {{max_supply}} assets can ever be created within this template.
+{{else}}There is no maximum amount of assets that can be created within this template.
+{{/if}}
+
+Unlike createtempl, this action also sets mutable template data, which the collection's authorized accounts can change later with settempldata.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of {{authorized_creator}}, who must be an authorized account of the {{collection_name}} collection.
+</div>
+
+<h1 class="contract">settempldata</h1>
+
+---
+spec_version: "0.2.0"
+title: Update a template's mutable data
+summary: '{{nowrap authorized_editor}} updates the mutable data of template {{nowrap template_id}} in the {{nowrap collection_name}} collection'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+{{authorized_editor}} replaces the mutable data of the template {{template_id}} within the {{collection_name}} collection with {{new_mutable_data}}.
+
+The template's immutable data, its transferability, its burnability and its maximum supply are not changed. Assets already minted from this template are affected, because mutable template data is read from the template rather than copied onto each asset.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of {{authorized_editor}}, who must be an authorized account of the {{collection_name}} collection.
+</div>
+
+<h1 class="contract">deltemplate</h1>
+
+---
+spec_version: "0.2.0"
+title: Delete an unused template
+summary: '{{nowrap authorized_editor}} deletes the template {{nowrap template_id}} from the {{nowrap collection_name}} collection'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+{{authorized_editor}} deletes the template {{template_id}} within the {{collection_name}} collection.
+
+A template can only be deleted while no assets have been issued from it. The deletion is permanent and the template id is not reused.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of {{authorized_editor}}, who must be an authorized account of the {{collection_name}} collection.
+</div>
+
+<h1 class="contract">redtemplmax</h1>
+
+---
+spec_version: "0.2.0"
+title: Reduce a template's maximum supply
+summary: '{{nowrap authorized_editor}} reduces the maximum supply of template {{nowrap template_id}} to {{nowrap new_max_supply}}'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+{{authorized_editor}} lowers the maximum supply of the template {{template_id}} within the {{collection_name}} collection to {{new_max_supply}}.
+
+The maximum supply can only be reduced, never raised, and never below the number of assets already issued from this template. The reduction is permanent.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of {{authorized_editor}}, who must be an authorized account of the {{collection_name}} collection.
+</div>
+
+<h1 class="contract">setschematyp</h1>
+
+---
+spec_version: "0.2.0"
+title: Set media type descriptors for a schema
+summary: '{{nowrap authorized_editor}} sets the media type descriptors of the {{nowrap schema_name}} schema in the {{nowrap collection_name}} collection'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+{{authorized_editor}} sets the media type descriptors of the schema {{schema_name}} within the {{collection_name}} collection to {{schema_format_type}}.
+
+These descriptors record how each field of the schema should be interpreted, for example as an image or a video. They replace the schema's existing descriptors in full rather than merging with them, so any descriptor omitted here is removed.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of {{authorized_editor}}, who must be an authorized account of the {{collection_name}} collection.
+</div>
+
+<h1 class="contract">createauswap</h1>
+
+---
+spec_version: "0.2.0"
+title: Propose a new collection author
+summary: 'The author of {{nowrap collection_name}} proposes {{nowrap new_author}} as the collection's new author'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+The current author of the {{collection_name}} collection proposes that {{new_author}} becomes its new author.
+
+This action only records the proposal. The collection's author does not change until {{new_author}} calls acceptauswap. Until then the current author keeps full control and may withdraw the proposal.
+
+{{#if owner}}The proposal also transfers the collection's owner permission.
+{{else}}The proposal does not transfer the collection's owner permission.
+{{/if}}
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the owner permission of the current author of the {{collection_name}} collection.
+</div>
+
+<h1 class="contract">acceptauswap</h1>
+
+---
+spec_version: "0.2.0"
+title: Accept becoming a collection's author
+summary: '{{nowrap collection_name}}'s proposed new author accepts the author change'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+The account proposed as the new author of the {{collection_name}} collection accepts the change.
+
+On acceptance the collection's author becomes the proposed account, and the pending proposal is removed. This transfers control of the collection, including the right to authorize accounts and to set the market fee.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of the account named as the new author in the pending proposal for {{collection_name}}.
+</div>
+
+<h1 class="contract">rejectauswap</h1>
+
+---
+spec_version: "0.2.0"
+title: Reject or withdraw a proposed author change
+summary: 'The pending author change for {{nowrap collection_name}} is rejected'
+icon: https://atomicassets.io/image/logo256.png#108AEE3530F4EB368A4B0C28800894CFBABF46534F48345BF6453090554C52D5
+---
+
+<b>Description:</b>
+<div class="description">
+The pending author change for the {{collection_name}} collection is rejected and the proposal is removed.
+
+The collection's author does not change. A new proposal can be created afterwards with createauswap.
+</div>
+
+<b>Clauses:</b>
+<div class="clauses">
+This action may only be called with the permission of either the current author of {{collection_name}} or the account named as the proposed new author.
+</div>
